@@ -324,6 +324,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get the granting user’s own profile
+         * @description Read the profile of the user who issued the presented credential. This is the only credential-gated route on the API: it requires an `Authorization: DFOS <request-proof>` header alongside `X-Credential: <credential>`, per the DFOS API-AUTH specification. The credential selects the subject — there is no path parameter and no way to name another user. Requires the `read:profile` action on this host.
+         */
+        get: operations["profile.getOwnProfile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/protocol": {
         parameters: {
             query?: never;
@@ -2804,6 +2824,176 @@ export interface operations {
                         /** @constant */
                         status: 404;
                         /** @default Not found. A missing space and a non-public (private) one return a byte-identical 404 by design — the two are deliberately indistinguishable (no existence leak). */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 429 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_RATE_LIMITED";
+                        /** @constant */
+                        status: 429;
+                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
+                        message: string;
+                        data: {
+                            /** @description Which per-IP budget was exhausted */
+                            scope: string;
+                            /** @description Milliseconds to wait before retrying */
+                            retryAfterMs: number;
+                        };
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 503 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_SERVICE_UNAVAILABLE";
+                        /** @constant */
+                        status: 503;
+                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+        };
+    };
+    "profile.getOwnProfile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        did: components["schemas"]["ProtocolDid"];
+                        /** @description The user's handle, or null if unset. A MUTABLE alias — the `did` is the canonical, stable identifier to store. */
+                        username: string | null;
+                        /** @description Display name, or null */
+                        displayName: string | null;
+                        /** @description Profile bio / description, or null */
+                        description: string | null;
+                        /** @description The account email of the user who issued this credential. PRIVATE — it is served only under a verified request proof, and only to the audience the user granted. Revoking the credential ends access immediately; it does not un-share what was already read. */
+                        email: string;
+                        /**
+                         * Format: date-time
+                         * @description When the user joined DFOS (ISO 8601 UTC)
+                         */
+                        createdAt: string;
+                    };
+                };
+            };
+            /** @description 401 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_AUTHENTICATION_FAILED";
+                        /** @constant */
+                        status: 401;
+                        /** @default The DFOS request proof was missing, malformed, stale, or did not verify. Responses carry `WWW-Authenticate: DFOS`. Sign a fresh proof over this exact method, host, path, and body. */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 403 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_UNAUTHORIZED";
+                        /** @constant */
+                        status: 403;
+                        /** @default The request proof verified but the credential does not authorize this request — it is expired, revoked, not issued by this platform, or its attenuation does not cover this action on this host. */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 413 */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_INVALID_REQUEST";
+                        /** @constant */
+                        status: 413;
+                        /** @default The request body exceeds the maximum this endpoint will authenticate. A proof binds the body it was signed over, so an unhashable body cannot be authenticated at any size — the cap is refused before the signature is checked, not after. */
                         message: string;
                         data?: unknown;
                     } | {

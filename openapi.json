@@ -2,59 +2,27 @@
   "info": {
     "title": "The DFOS API",
     "version": "1.0.0-beta",
-    "description": "The external HTTP API for Dark Forest OS — space profiles, public feeds, and\npublic posts.\n\nEvery endpoint today is an anonymous `GET`: no credentials are required or\naccepted, and every response is viewer-independent. Data responses are\n`no-store` (only the generated spec is CDN-cached), so referenced media in a\npublic post comes back as time-limited SIGNED URLs inline — never persist those,\nre-fetch the post for fresh ones (see `urlExpiresAt`). A non-public or missing\nspace returns a 404 that is deliberately indistinguishable from any other — the\nAPI never reveals whether a space it won't serve actually exists.\n\n**Forward-compatibility — clients MUST:**\n- **Tolerate unknown fields.** New response fields are added without a version\n  bump; ignore fields you don't recognize.\n- **Tolerate unknown enum values.** Enums (e.g. `joinMode`, `siteMode`) can grow\n  new members; treat an unrecognized value as an opaque string, not an error.\n- **Treat cursors as opaque tokens.** Pass `nextCursor`/`previousCursor` back\n  verbatim; never parse or construct a cursor.\n- **Treat subdomains as mutable aliases.** A space's subdomain can change or be\n  reassigned; the space `id` and protocol `did` are the canonical, stable\n  identifiers to store.",
+    "description": "The external HTTP API for Dark Forest OS — space profiles, public feeds, and\npublic posts.\n\nEvery endpoint is a `GET`, and every endpoint is anonymous **except one**:\n`GET /profile` is credential-gated and serves the profile of the user who\ngranted access. Anonymous responses are viewer-independent — the anonymous\naudience is the same for everyone, so there is exactly one correct projection of\nany resource. `GET /profile` is the deliberate carve-out: its body is a\nspecific person's data, selected by the credential presented, and it is\n`no-store` like every other data response.\n\n**Authenticating to `GET /profile`.** Access is proof-of-possession, not a\nbearer token. The caller presents a durable **credential** the user issued (via\nSign In With DFOS) alongside a fresh **request proof** — a short-lived JWS,\nsigned by the key the credential was issued to, binding this exact method, host,\npath, and body:\n\n```\nAuthorization: DFOS <request-proof JWS>\nX-Credential:  <credential JWS>\n```\n\nNeither works alone: a captured credential is inert without the audience key, and\na captured proof authorizes nothing but the single request it already described,\nfor the seconds its freshness window allows. A proof-layer failure is `401`\nwith a `WWW-Authenticate: DFOS` challenge (sign a correct proof and retry); a\ncredential-layer failure is `403` (the grant does not cover this — retrying\nwill not help). The full byte contract is\n[DFOS API-AUTH](https://protocol.dfos.com/api-auth).\n\nData responses are `no-store` (only the generated spec is CDN-cached), so\nreferenced media in a public post comes back as time-limited SIGNED URLs inline —\nnever persist those, re-fetch the post for fresh ones (see `urlExpiresAt`). A\nnon-public or missing space returns a 404 that is deliberately indistinguishable\nfrom any other — the API never reveals whether a space it won't serve actually\nexists.\n\n**Forward-compatibility — clients MUST:**\n- **Tolerate unknown fields.** New response fields are added without a version\n  bump; ignore fields you don't recognize.\n- **Tolerate unknown enum values.** Enums (e.g. `joinMode`, `siteMode`) can grow\n  new members; treat an unrecognized value as an opaque string, not an error.\n- **Treat cursors as opaque tokens.** Pass `nextCursor`/`previousCursor` back\n  verbatim; never parse or construct a cursor.\n- **Treat subdomains as mutable aliases.** A space's subdomain can change or be\n  reassigned; the space `id` and protocol `did` are the canonical, stable\n  identifiers to store.",
     "contact": {
       "name": "DFOS",
       "url": "https://docs.dfos.com/api"
     }
   },
   "security": [],
-  "externalDocs": {
-    "url": "https://docs.dfos.com/api",
-    "description": "DFOS API guides, quickstart, and content-visibility model"
-  },
-  "servers": [
-    {
-      "url": "https://api.dfos.com/v1/",
-      "description": "The DFOS API HTTPS endpoint"
-    }
-  ],
-  "tags": [
-    {
-      "name": "Spaces",
-      "description": "Space profiles, site config, and discovery"
-    },
-    {
-      "name": "Posts",
-      "description": "Space feeds and individual public posts"
-    },
-    {
-      "name": "Pages",
-      "description": "Space public pages (about, docs, and other durable documents)"
-    },
-    {
-      "name": "Products",
-      "description": "Store products with a public purchase page"
-    },
-    {
-      "name": "Topics",
-      "description": "World-readable topics within a space"
-    },
-    {
-      "name": "Events",
-      "description": "Public calendar events, per space and across all public spaces"
-    },
-    {
-      "name": "Users",
-      "description": "Public user profiles"
-    },
-    {
-      "name": "Protocol",
-      "description": "Protocol-layer discovery (relay endpoint)"
-    }
-  ],
-  "openapi": "3.1.1",
   "components": {
+    "securitySchemes": {
+      "dfosRequestProof": {
+        "type": "http",
+        "scheme": "dfos",
+        "description": "A request proof: a short-lived JWS signed by the key the credential was issued to, binding this exact method, host, path, and body. Carried as `Authorization: DFOS <jws>`. Deliberately NOT `Bearer` — nothing here is a bearer token, and naming it one invites the logging, caching, and forwarding this artifact exists to make useless. See https://protocol.dfos.com/api-auth."
+      },
+      "dfosCredential": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Credential",
+        "description": "The DFOS credential the user issued to your application, embedding its full delegation chain. A durable grant — it names what you may do and until when, and is revocable by the user at any time. It is not a secret in the bearer-token sense: without the audience key it authorizes nothing."
+      }
+    },
     "schemas": {
       "PublicPaginationInput": {
         "type": "object",
@@ -2645,6 +2613,55 @@
       }
     }
   },
+  "externalDocs": {
+    "url": "https://docs.dfos.com/api",
+    "description": "DFOS API guides, quickstart, and content-visibility model"
+  },
+  "servers": [
+    {
+      "url": "https://api.dfos.com/v1/",
+      "description": "The DFOS API HTTPS endpoint"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Spaces",
+      "description": "Space profiles, site config, and discovery"
+    },
+    {
+      "name": "Posts",
+      "description": "Space feeds and individual public posts"
+    },
+    {
+      "name": "Pages",
+      "description": "Space public pages (about, docs, and other durable documents)"
+    },
+    {
+      "name": "Products",
+      "description": "Store products with a public purchase page"
+    },
+    {
+      "name": "Topics",
+      "description": "World-readable topics within a space"
+    },
+    {
+      "name": "Events",
+      "description": "Public calendar events, per space and across all public spaces"
+    },
+    {
+      "name": "Users",
+      "description": "Public user profiles"
+    },
+    {
+      "name": "Profile",
+      "description": "The granting user’s own profile — the credential-gated tier (API-AUTH request proof)"
+    },
+    {
+      "name": "Protocol",
+      "description": "Protocol-layer discovery (relay endpoint)"
+    }
+  ],
+  "openapi": "3.1.1",
   "paths": {
     "/spaces/{space}": {
       "get": {
@@ -6766,6 +6783,409 @@
             }
           }
         }
+      }
+    },
+    "/profile": {
+      "get": {
+        "operationId": "profile.getOwnProfile",
+        "summary": "Get the granting user’s own profile",
+        "description": "Read the profile of the user who issued the presented credential. This is the only credential-gated route on the API: it requires an `Authorization: DFOS <request-proof>` header alongside `X-Credential: <credential>`, per the DFOS API-AUTH specification. The credential selects the subject — there is no path parameter and no way to name another user. Requires the `read:profile` action on this host.",
+        "tags": [
+          "Profile"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "did": {
+                      "$ref": "#/components/schemas/ProtocolDid"
+                    },
+                    "username": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "The user's handle, or null if unset. A MUTABLE alias — the `did` is the canonical, stable identifier to store."
+                    },
+                    "displayName": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "Display name, or null"
+                    },
+                    "description": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "Profile bio / description, or null"
+                    },
+                    "email": {
+                      "type": "string",
+                      "description": "The account email of the user who issued this credential. PRIVATE — it is served only under a verified request proof, and only to the audience the user granted. Revoking the credential ends access immediately; it does not un-share what was already read."
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "description": "When the user joined DFOS (ISO 8601 UTC)"
+                    }
+                  },
+                  "required": [
+                    "did",
+                    "username",
+                    "displayName",
+                    "description",
+                    "email",
+                    "createdAt"
+                  ],
+                  "additionalProperties": false,
+                  "description": "The granting user's own profile"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": true
+                        },
+                        "code": {
+                          "const": "E_AUTHENTICATION_FAILED"
+                        },
+                        "status": {
+                          "const": 401
+                        },
+                        "message": {
+                          "type": "string",
+                          "default": "The DFOS request proof was missing, malformed, stale, or did not verify. Responses carry `WWW-Authenticate: DFOS`. Sign a fresh proof over this exact method, host, path, and body."
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": false
+                        },
+                        "code": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "number"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": true
+                        },
+                        "code": {
+                          "const": "E_UNAUTHORIZED"
+                        },
+                        "status": {
+                          "const": 403
+                        },
+                        "message": {
+                          "type": "string",
+                          "default": "The request proof verified but the credential does not authorize this request — it is expired, revoked, not issued by this platform, or its attenuation does not cover this action on this host."
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": false
+                        },
+                        "code": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "number"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "413",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": true
+                        },
+                        "code": {
+                          "const": "E_INVALID_REQUEST"
+                        },
+                        "status": {
+                          "const": 413
+                        },
+                        "message": {
+                          "type": "string",
+                          "default": "The request body exceeds the maximum this endpoint will authenticate. A proof binds the body it was signed over, so an unhashable body cannot be authenticated at any size — the cap is refused before the signature is checked, not after."
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": false
+                        },
+                        "code": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "number"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "429",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": true
+                        },
+                        "code": {
+                          "const": "E_RATE_LIMITED"
+                        },
+                        "status": {
+                          "const": 429
+                        },
+                        "message": {
+                          "type": "string",
+                          "default": "Rate limit exceeded — retry after `retryAfterMs`."
+                        },
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "scope": {
+                              "type": "string",
+                              "description": "Which per-IP budget was exhausted"
+                            },
+                            "retryAfterMs": {
+                              "type": "number",
+                              "description": "Milliseconds to wait before retrying"
+                            }
+                          },
+                          "required": [
+                            "scope",
+                            "retryAfterMs"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message",
+                        "data"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": false
+                        },
+                        "code": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "number"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "503",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": true
+                        },
+                        "code": {
+                          "const": "E_SERVICE_UNAVAILABLE"
+                        },
+                        "status": {
+                          "const": 503
+                        },
+                        "message": {
+                          "type": "string",
+                          "default": "Service temporarily unavailable — the rate-limit store was unreachable (fail-closed)."
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": false
+                        },
+                        "code": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "number"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "dfosRequestProof": [],
+            "dfosCredential": []
+          }
+        ]
       }
     },
     "/protocol": {
