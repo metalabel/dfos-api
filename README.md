@@ -82,13 +82,20 @@ API never reveals whether a space it won't serve actually exists.
 
 ## Signed requests
 
-Every endpoint today is an anonymous `GET`. No credentials are required or
-accepted, and the default fetch is all you need.
+Most of the API is an anonymous `GET`: no credentials are required or accepted,
+and the default fetch is all you need.
 
-Credential-gated endpoints are coming. When they land, you will sign each
-request with a DFOS key and pass a signing fetch through the `fetch` option.
-The client calls your fetch with a single `Request`, which is everything the
-proof needs to cover:
+One route is credential-gated. `GET /v1/profile` returns the profile of the
+user who granted you access — including their account email — and there is no
+path parameter, because the credential names the subject. To call it you need a
+credential carrying the `read:profile` action on `api.dfos.com`, which the user
+issues to your application through
+[Sign In With DFOS](https://protocol.dfos.com/siwd), plus a fresh proof signed
+per request. Neither artifact works alone.
+
+You sign each request with a DFOS key and pass a signing fetch through the
+`fetch` option. The client calls your fetch with a single `Request`, which is
+everything the proof needs to cover:
 
 ```ts
 import { createDfosApi } from '@metalabel/dfos-api';
@@ -116,10 +123,13 @@ const api = createDfosApi({
 ```
 
 The signing lives in `@metalabel/dfos-client`, not here — this package stays a
-typed view of the spec. Nothing about the client surface changes when
-authenticated endpoints arrive; you pass a different fetch. The byte contract
-and the two headers are specified in
-[API-AUTH](https://protocol.dfos.com/api-auth).
+typed view of the spec. Nothing about the client surface changes for a
+credential-gated endpoint; you pass a different fetch. The byte contract and the
+two headers are specified in [API-AUTH](https://protocol.dfos.com/api-auth).
+
+For a runnable end-to-end example — consent, credential, signed call — see the
+[SIWD demo](https://github.com/metalabel/dfos/tree/main/examples/siwd-demo). Its
+`api/profile.ts` calls `GET /v1/profile` through this seam.
 
 ## Keeping the snapshot current
 
@@ -141,6 +151,7 @@ types must be exactly what the committed snapshot generates.
 - API docs: https://docs.dfos.com/api
 - OpenAPI spec: https://api.dfos.com/openapi.json
 - DFOS protocol: https://protocol.dfos.com
+- SIWD demo, end to end: https://github.com/metalabel/dfos/tree/main/examples/siwd-demo
 
 ## License
 
