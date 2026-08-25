@@ -82,16 +82,18 @@ API never reveals whether a space it won't serve actually exists.
 
 ## Signed requests
 
-Most of the API is an anonymous `GET`: no credentials are required or accepted,
-and the default fetch is all you need.
+The spec has exactly one credential-gated operation: `GET /v1/profile`
+(`profile.getOwnProfile`), which requires **both** security schemes —
+`dfosRequestProof` and `dfosCredential`, ANDed, so neither artifact works alone.
+Every other operation remains an anonymous `GET`: no credentials are required or
+accepted, and the default fetch is all you need.
 
-One route is credential-gated. `GET /v1/profile` returns the profile of the
-user who granted you access — including their account email — and there is no
-path parameter, because the credential names the subject. To call it you need a
-credential carrying the `read:profile` action on `api.dfos.com`, which the user
-issues to your application through
-[Sign In With DFOS](https://protocol.dfos.com/siwd), plus a fresh proof signed
-per request. Neither artifact works alone.
+`GET /v1/profile` returns the profile of the user who granted you access —
+including their account email — and takes no path parameter, because the
+credential names the subject. Calling it needs a credential carrying the
+`read:profile` action on `api.dfos.com`, which the user issues to your
+application through [Sign In With DFOS](https://protocol.dfos.com/siwd), plus a
+fresh request proof signed per call.
 
 You sign each request with a DFOS key and pass a signing fetch through the
 `fetch` option. The client calls your fetch with a single `Request`, which is
@@ -128,8 +130,10 @@ credential-gated endpoint; you pass a different fetch. The byte contract and the
 two headers are specified in [API-AUTH](https://protocol.dfos.com/api-auth).
 
 For a runnable end-to-end example — consent, credential, signed call — see the
-[SIWD demo](https://github.com/metalabel/dfos/tree/main/examples/siwd-demo). Its
-`api/profile.ts` calls `GET /v1/profile` through this seam.
+[SIWD demo](https://github.com/metalabel/dfos/tree/main/examples/siwd-demo).
+[`api/profile.ts`](https://github.com/metalabel/dfos/blob/main/examples/siwd-demo/api/profile.ts)
+is the live reference consumer: it builds a proof with `signApiRequest` and
+calls `GET /v1/profile` through this seam.
 
 ## Keeping the snapshot current
 
