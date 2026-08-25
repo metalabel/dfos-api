@@ -22,10 +22,10 @@ export interface DfosApiOptions {
 /**
  * Create a typed client for the public DFOS API.
  *
- * Every endpoint today is an anonymous GET. When credential-gated endpoints
- * land, pass a fetch wrapped with `signApiRequest` from
- * `@metalabel/dfos-client/api-auth` via the `fetch` option — nothing else
- * about the client changes.
+ * Every operation is an anonymous GET except `GET /v1/profile`, which is
+ * credential-gated. To call it, pass a fetch wrapped with `signApiRequest`
+ * from `@metalabel/dfos-client/api-auth` via the `fetch` option — nothing
+ * else about the client changes. See the README's "Signed requests" section.
  */
 export function createDfosApi(options: DfosApiOptions = {}) {
   return createClient<paths>({
