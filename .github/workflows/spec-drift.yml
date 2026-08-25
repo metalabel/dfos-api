@@ -47,14 +47,16 @@ jobs:
       - name: Check for drift
         id: drift
         run: |
-          if [ -z "$(git status --porcelain)" ]; then
+          if git diff --quiet -- openapi.json src/generated; then
             echo "No drift — the committed snapshot matches the live spec."
             echo "drifted=false" >> "$GITHUB_OUTPUT"
           else
-            git --no-pager diff --stat
+            git --no-pager diff --stat -- openapi.json src/generated
             echo "drifted=true" >> "$GITHUB_OUTPUT"
           fi
 
+      # A PR opened with GITHUB_TOKEN does not trigger CI (GitHub blocks
+      # workflow recursion), so the gate has to run here or it runs nowhere.
       - name: Verify the regenerated types still build
         if: steps.drift.outputs.drifted == 'true'
         run: |
@@ -81,7 +83,7 @@ jobs:
               --base main \
               --head spec-update \
               --title "chore: refresh openapi.json snapshot" \
-              --body "The live spec at https://api.dfos.com/openapi.json has moved. This refreshes the committed snapshot and regenerates \`src/generated/api.ts\`. Review the type diff for anything a consumer would notice — removed fields and narrowed types are breaking, added ones are not."
+              --body "The live spec at https://api.dfos.com/openapi.json has moved. This refreshes the committed snapshot and regenerates \`src/generated/api.ts\`. Review the type diff for anything a consumer would notice — removed fields and narrowed types are breaking, added ones are not. Note that CI does not run on this PR: GitHub blocks workflow recursion for PRs opened with \`GITHUB_TOKEN\`, so the typecheck, test, and build gate ran in the job that opened it instead."
           fi
         env:
           GH_TOKEN: ${{ github.token }}
