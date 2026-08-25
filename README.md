@@ -96,33 +96,27 @@ application through [Sign In With DFOS](https://protocol.dfos.com/siwd), plus a
 fresh request proof signed per call.
 
 You sign each request with a DFOS key and pass a signing fetch through the
-`fetch` option. The client calls your fetch with a single `Request`, which is
-everything the proof needs to cover:
+`fetch` option. `createApiAuthFetch` from `@metalabel/dfos-client` (v0.33.0+)
+builds one from your credential and key:
 
 ```ts
 import { createDfosApi } from '@metalabel/dfos-api';
-import { signApiRequest } from '@metalabel/dfos-client/api-auth'; // v0.32.0+
+import { createApiAuthFetch } from '@metalabel/dfos-client/api-auth'; // v0.33.0+
 
 const api = createDfosApi({
-  fetch: async (request) => {
-    const url = new URL(request.url);
-    const { proof } = await signApiRequest({
-      method: request.method,
-      host: url.host,
-      path: url.pathname + url.search,
-      body: new Uint8Array(await request.clone().arrayBuffer()),
-      credentialCID,
-      kid,
-      sign,
-    });
-
-    const headers = new Headers(request.headers);
-    headers.set('authorization', `DFOS ${proof}`);
-    headers.set('x-credential', credential);
-    return fetch(new Request(request, { headers }));
-  },
+  fetch: createApiAuthFetch({ credential, kid, sign }),
 });
+
+const { data, error } = await api.GET('/profile');
 ```
+
+The adapter signs exactly the `Request` the client composes — method, target,
+and body octets — so the bytes the proof covers are the bytes on the wire. It
+buffers request bodies in full (the proof hashes the complete body before
+sending), refuses plaintext requests to non-loopback hosts, and does not follow
+redirects. Underneath it composes `signApiRequest` and `buildApiAuthHeaders`,
+which stay exported for signing backends that describe a request rather than
+receive one.
 
 The signing lives in `@metalabel/dfos-client`, not here — this package stays a
 typed view of the spec. Nothing about the client surface changes for a

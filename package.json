@@ -54,6 +54,7 @@
     "openapi-fetch": "^0.14.1"
   },
   "devDependencies": {
+    "@metalabel/dfos-client": "0.33.0",
     "@types/node": "^24.10.4",
     "openapi-typescript": "^7.10.0",
     "tsup": "^8.5.1",
