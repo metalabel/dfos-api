@@ -23,5 +23,5 @@
     "noUncheckedIndexedAccess": true,
     "noImplicitReturns": true
   },
-  "include": ["src", "tests", "tsup.config.ts"]
+  "include": ["src", "tests", "tsup.config.ts", "vitest.config.ts"]
 }
