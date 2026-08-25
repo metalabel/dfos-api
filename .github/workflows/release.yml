@@ -89,7 +89,6 @@ jobs:
           node-version-file: '.nvmrc'
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
-          registry-url: 'https://registry.npmjs.org'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -97,6 +96,15 @@ jobs:
       - name: Build
         run: pnpm build
 
+      # Trusted publishing needs npm >= 11.5.1; Node 22 ships npm 10.
+      - name: Upgrade npm for OIDC trusted publishing
+        run: npm install -g npm@11
+
+      # Auth is npm trusted publishing (OIDC): the package on npmjs.com is
+      # configured to trust this repo + this workflow file, and npm exchanges
+      # the job's OIDC token for publish access. No npm token exists anywhere.
+      # Renaming this file breaks the trust binding — update the trusted
+      # publisher config on npmjs.com if it ever moves.
       - name: Publish to npm
         run: |
           ver=$(node -p "require('./package.json').version")
@@ -105,5 +113,3 @@ jobs:
           else
             npm publish --provenance --access public
           fi
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
