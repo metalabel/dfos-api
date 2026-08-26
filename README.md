@@ -158,7 +158,17 @@ The user issues the credential to your application through
 [setup guide](https://docs.dfos.com/docs/developers/sign-in-with-dfos/setup)
 walks through registering an app and obtaining one. A consent can span several
 scope sets, and the resulting single credential carries the combined action
-list. Calling a gated route takes that credential plus a fresh request proof
+list.
+
+An application with no domain — a CLI, an agent, a desktop app — obtains its
+credential the same way, under SIWD's **loopback credential tier**: it proves
+control of a client key rather than an origin, and the credential it receives
+introspects with a null `domain`, as above. `dfos login` from the
+[DFOS CLI](https://github.com/metalabel/dfos/tree/main/packages/dfos-cli) is
+the turnkey path — it runs the loopback flow and stores a credential locally,
+ready to present through this package's `fetch` seam like any other.
+
+Calling a gated route takes that credential plus a fresh request proof
 signed per call. Both arrive through the `fetch` seam:
 `createApiAuthFetch` from `@metalabel/dfos-client` (v0.33.0+) builds a signing
 fetch from your credential and key:
@@ -215,6 +225,7 @@ snapshot generates.
 
 - API docs: https://docs.dfos.com/api
 - Get a credential (SIWD setup guide): https://docs.dfos.com/docs/developers/sign-in-with-dfos/setup
+- DFOS CLI (`dfos login`, credentials for local tools): https://github.com/metalabel/dfos/tree/main/packages/dfos-cli
 - Memberships route reference: https://docs.dfos.com/docs/api/memberships
 - OpenAPI spec: https://api.dfos.com/openapi.json
 - DFOS protocol: https://protocol.dfos.com
