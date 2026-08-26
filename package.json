@@ -1,6 +1,6 @@
 {
   "name": "@metalabel/dfos-api",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "description": "Typed TypeScript client for the public DFOS API — a committed openapi.json snapshot, generated types, and a thin openapi-fetch client",
   "license": "MIT",

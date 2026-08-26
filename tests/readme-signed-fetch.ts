@@ -19,5 +19,6 @@ const api = createDfosApi({
 });
 
 const { data, error } = await api.GET('/profile');
+const memberships = await api.GET('/memberships');
 
-export { data, error };
+export { data, error, memberships };
