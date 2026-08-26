@@ -33,7 +33,7 @@ export interface paths {
         };
         /**
          * List public spaces
-         * @description List public, discoverable spaces, cursor-paginated. Lean discovery-card projection per item. Optionally filter by `joinMode`.
+         * @description List public, discoverable spaces, cursor-paginated. Lean discovery-card projection per item. Optionally filter by `joinMode`, recency (`activeWithinDays`), `category`, or whether the space explicitly opted in to the directory (`optedIn`). Every filter is a request parameter, never encoded in a cursor. Ordered by recent activity.
          */
         get: operations["spaces.listSpaces"];
         put?: never;
@@ -333,9 +333,29 @@ export interface paths {
         };
         /**
          * Get the granting user’s own profile
-         * @description Read the profile of the user who issued the presented credential. This is the only credential-gated route on the API: it requires an `Authorization: DFOS <request-proof>` header alongside `X-Credential: <credential>`, per the DFOS API-AUTH specification. The credential selects the subject — there is no path parameter and no way to name another user. Requires the `read:profile` action on this host.
+         * @description Read the profile of the user who issued the presented credential. A credential-gated route: it requires an `Authorization: DFOS <request-proof>` header alongside `X-Credential: <credential>`, per the DFOS API-AUTH specification. The credential selects the subject — there is no path parameter and no way to name another user. Requires the `read:profile` **or** `read:email` action on this host, and the response is assembled from the actions the grant actually carries: the profile fields (`username`, `displayName`, `description`, `createdAt`) under `read:profile`, `email` under `read:email`. Only `did` is unconditional, so a `read:email`-only credential receives `{did, email}`.
          */
         get: operations["profile.getOwnProfile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/memberships": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the granting user’s memberships
+         * @description The spaces the user who issued the presented credential currently belongs to, cursor-paginated, each with their role and the groups they belong to inside that space. Requires the `read:memberships` action on this host. The credential selects the subject — there is no path parameter and no way to name another user. **Every** current membership is listed, private and unlisted spaces included: that is what the consent line grants. Memberships the user has left, and spaces that were deleted, are not listed. Pass `space` to check a single space instead of walking the whole list.
+         */
+        get: operations["memberships.listMemberships"];
         put?: never;
         post?: never;
         delete?: never;
@@ -484,6 +504,8 @@ export interface components {
             eventCountSummary?: string;
             /** @description Worded summary of how many media files have been uploaded to the space (e.g. "about a hundred media uploads", "no media uploads"). Covers ALL of the space's media, including images it serves publicly — the avatar and header on this response are themselves uploads and are counted. Approximate worded scale of the space's interior, never an exact count. An opaque display string from an open set — render it, never parse it. Viewer-independent. */
             mediaUploadCountSummary?: string;
+            /** @description The normalized discovery category the space filed itself under. ABSENT (not null) when the space has not filed one, matching the `protocol` block convention. The same token the discovery listing emits and its `category` filter accepts. */
+            category?: string;
             /** @description The questions an applicant answers when joining, present ONLY for a public application-mode space (`joinMode: "application"`) that has configured at least one question. Absent for every other space. Viewer-independent — the same list for all callers. */
             applicationQuestions?: components["schemas"]["PublicApplicationQuestionOutput"][];
             /**
@@ -519,7 +541,7 @@ export interface components {
          * @description How users can join the space
          * @enum {string}
          */
-        PublicSpaceJoinMode: "closed" | "open" | "application" | "paid" | "allowlist";
+        PublicSpaceJoinMode: "closed" | "open" | "application" | "allowlist";
         /** @description A public space in the discovery listing */
         SpaceDiscoveryItemOutput: {
             /** @description Space short ID */
@@ -537,6 +559,8 @@ export interface components {
             links: components["schemas"]["PublicProfileLinkOutput"][];
             /** @description Worded member-count summary (e.g. "a few dozen members"). Public surfaces deliberately avoid exact counts. */
             memberCountSummary: string;
+            /** @description The normalized discovery category the space filed itself under. ABSENT (not null) when the space has not filed one, matching the `protocol` block convention. A storage token, not display copy — pass it back verbatim as the `category` filter. */
+            category?: string;
         };
         /** @description A cursor-paginated page of public spaces */
         SpaceDiscoveryPageOutput: {
@@ -1237,6 +1261,71 @@ export interface components {
                 indexIdentities: string;
             };
         };
+        /** @description A space the credential subject belongs to */
+        MembershipSpaceOutput: {
+            /**
+             * @description The space's entity id (`space_…`) — canonical and stable.
+             * @example space_6encc4akrze2ah9kntzd9t
+             */
+            id: string;
+            did: components["schemas"]["ProtocolDid"];
+            /** @description Effective subdomain — custom domain if set, otherwise the normalized `space-{id}` form. A MUTABLE alias, and for a private space it may not resolve publicly at all; the `id` and `did` are canonical. */
+            domain: string;
+            /** @description Space display name, or null */
+            displayName: string | null;
+            /** @description Space description, or null */
+            description: string | null;
+            /** @description Resolved public CDN URL for the space avatar, or null */
+            avatarUrl: string | null;
+            /** @description Ordered space profile links (may be empty) */
+            links: components["schemas"]["PublicProfileLinkOutput"][];
+            /** @description Worded member-count summary (e.g. "a few dozen members"). DFOS surfaces deliberately avoid exact counts. */
+            memberCountSummary: string;
+        };
+        /** @description A group the credential subject belongs to */
+        MembershipGroupOutput: {
+            /**
+             * @description The group's entity id (`group_…`) — canonical and stable.
+             * @example group_6encc4akrze2ah9kntzd9t
+             */
+            id: string;
+            did: components["schemas"]["ProtocolDid"];
+            /** @description Group name */
+            name: string;
+            /** @description Group description, or null */
+            description: string | null;
+            /** @description Resolved public CDN URL for the group avatar, or null */
+            avatarUrl: string | null;
+            /** @description The group's named palette color, or null when unset */
+            color: ("red" | "orange" | "amber" | "yellow" | "lime" | "green" | "emerald" | "teal" | "cyan" | "sky" | "blue" | "indigo" | "violet" | "purple" | "fuchsia" | "pink" | "rose") | null;
+            /**
+             * @description The subject's role in the group
+             * @enum {string}
+             */
+            role: "owner" | "admin" | "member";
+        };
+        /** @description One of the credential subject's space memberships */
+        MembershipOutput: {
+            space: components["schemas"]["MembershipSpaceOutput"];
+            /**
+             * @description The subject's role in the space
+             * @enum {string}
+             */
+            role: "owner" | "admin" | "member";
+            /** @description The subject's ACTIVE group memberships inside this space, in the space's own group order. Empty when they belong to no group in it — a normal state, not an error. */
+            groups: components["schemas"]["MembershipGroupOutput"][];
+        };
+        /** @description A cursor-paginated page of the credential subject's memberships */
+        MembershipPageOutput: {
+            /** @description Page of the subject's space memberships */
+            items: components["schemas"]["MembershipOutput"][];
+            /** @description Opaque cursor for the next page (null if no more results forward). Pass back verbatim as `after`; do not parse. */
+            nextCursor: string | null;
+            /** @description Opaque cursor for the previous page (null if at the beginning). Optional — may be omitted on responses that do not support backward paging. Pass back verbatim as `before`; do not parse. */
+            previousCursor?: string | null;
+            /** @description Total count of matching items (null if not computed). Optional — may be omitted entirely; clients must not depend on its presence. */
+            totalCount?: number | null;
+        };
     };
     responses: never;
     parameters: never;
@@ -1355,6 +1444,9 @@ export interface operations {
         parameters: {
             query?: {
                 joinMode?: components["schemas"]["PublicSpaceJoinMode"];
+                activeWithinDays?: number;
+                category?: string;
+                optedIn?: boolean;
                 limit?: number;
                 after?: string;
                 before?: string;
@@ -2912,20 +3004,180 @@ export interface operations {
                 content: {
                     "application/json": {
                         did: components["schemas"]["ProtocolDid"];
-                        /** @description The user's handle, or null if unset. A MUTABLE alias — the `did` is the canonical, stable identifier to store. */
-                        username: string | null;
-                        /** @description Display name, or null */
-                        displayName: string | null;
-                        /** @description Profile bio / description, or null */
-                        description: string | null;
-                        /** @description The account email of the user who issued this credential. PRIVATE — it is served only under a verified request proof, and only to the audience the user granted. Revoking the credential ends access immediately; it does not un-share what was already read. */
-                        email: string;
+                        /** @description The user's handle, or null if unset. A MUTABLE alias — the `did` is the canonical, stable identifier to store. ABSENT (not null) unless the credential carries `read:profile`. */
+                        username?: string | null;
+                        /** @description Display name, or null. ABSENT (not null) unless the credential carries `read:profile`. */
+                        displayName?: string | null;
+                        /** @description Profile bio / description, or null. ABSENT (not null) unless the credential carries `read:profile`. */
+                        description?: string | null;
+                        /** @description The account email of the user who issued this credential. PRIVATE — it is served only under a verified request proof, only to the audience the user granted, and only when that grant carries `read:email`. ABSENT (not null) otherwise. Revoking the credential ends access immediately; it does not un-share what was already read. */
+                        email?: string;
                         /**
                          * Format: date-time
-                         * @description When the user joined DFOS (ISO 8601 UTC)
+                         * @description When the user joined DFOS (ISO 8601 UTC). ABSENT unless the credential carries `read:profile`.
                          */
-                        createdAt: string;
+                        createdAt?: string;
                     };
+                };
+            };
+            /** @description 401 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_AUTHENTICATION_FAILED";
+                        /** @constant */
+                        status: 401;
+                        /** @default The DFOS request proof was missing, malformed, stale, or did not verify. Responses carry `WWW-Authenticate: DFOS`. Sign a fresh proof over this exact method, host, path, and body. */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 403 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_UNAUTHORIZED";
+                        /** @constant */
+                        status: 403;
+                        /** @default The request proof verified but the credential does not authorize this request — it is expired, revoked, not issued by this platform, or its attenuation does not cover this action on this host. */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 413 */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_INVALID_REQUEST";
+                        /** @constant */
+                        status: 413;
+                        /** @default The request body exceeds the maximum this endpoint will authenticate. A proof binds the body it was signed over, so an unhashable body cannot be authenticated at any size — the cap is refused before the signature is checked, not after. */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 429 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_RATE_LIMITED";
+                        /** @constant */
+                        status: 429;
+                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
+                        message: string;
+                        data: {
+                            /** @description Which per-IP budget was exhausted */
+                            scope: string;
+                            /** @description Milliseconds to wait before retrying */
+                            retryAfterMs: number;
+                        };
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 503 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_SERVICE_UNAVAILABLE";
+                        /** @constant */
+                        status: 503;
+                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+        };
+    };
+    "memberships.listMemberships": {
+        parameters: {
+            query?: {
+                space?: string;
+                limit?: number;
+                after?: string;
+                before?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MembershipPageOutput"];
                 };
             };
             /** @description 401 */

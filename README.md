@@ -85,18 +85,36 @@ the ones it knows, will break on a spec that was never breaking.
 
 ## Signed requests
 
-Exactly one operation is credential-gated: `GET /v1/profile`
-(`profile.getOwnProfile`). It requires **both** security schemes —
+Two operations are credential-gated: `GET /v1/profile`
+(`profile.getOwnProfile`) and `GET /v1/memberships`
+(`memberships.listMemberships`). Each requires **both** security schemes —
 `dfosRequestProof` and `dfosCredential`, ANDed, so neither artifact works
 alone. Every other operation is an anonymous `GET`: no credentials are required
 or accepted, and the default fetch is all you need.
 
-`GET /v1/profile` returns the profile of the user who granted you access —
-including their account email — and takes no path parameter, because the
-credential names the subject. Calling it needs a credential carrying the
-`read:profile` action on `api.dfos.com`, which the user issues to your
-application through [Sign In With DFOS](https://protocol.dfos.com/siwd), plus a
-fresh request proof signed per call. Both arrive through the `fetch` seam:
+Both routes answer about the user who granted you access, and neither takes a
+path parameter, because the credential names the subject:
+
+- **`GET /v1/profile`** is assembled from the actions the grant actually
+  carries: the profile fields (`username`, `displayName`, `description`,
+  `createdAt`) are present only under `read:profile`, and `email` only under
+  `read:email` — absent, not null, otherwise. Only `did` is unconditional, so
+  the generated types mark every other field optional. A `read:email`-only
+  credential receives `{ did, email }`.
+- **`GET /v1/memberships`** requires `read:memberships` and lists every space
+  the user currently belongs to — private and unlisted spaces included; that is
+  what the consent line grants — cursor-paginated, each with the user's role
+  and their groups inside that space. Pass `?space=` to check a single space
+  instead of walking the list. Route reference:
+  [docs.dfos.com/docs/api/memberships](https://docs.dfos.com/docs/api/memberships).
+
+The user issues the credential to your application through
+[Sign In With DFOS](https://protocol.dfos.com/siwd) — the
+[setup guide](https://docs.dfos.com/docs/developers/sign-in-with-dfos/setup)
+walks through registering an app and obtaining one. A consent can span several
+scope sets, and the resulting single credential carries the combined action
+list. Calling a gated route takes that credential plus a fresh request proof
+signed per call. Both arrive through the `fetch` seam:
 `createApiAuthFetch` from `@metalabel/dfos-client` (v0.33.0+) builds a signing
 fetch from your credential and key:
 
@@ -109,7 +127,11 @@ const api = createDfosApi({
 });
 
 const { data, error } = await api.GET('/profile');
+const memberships = await api.GET('/memberships');
 ```
+
+The same signing fetch serves both gated routes — which route a call may use is
+the credential's business, not the client's.
 
 The adapter signs exactly the `Request` the client composes — method, target,
 and body octets — buffering request bodies in full, refusing plaintext requests
@@ -144,6 +166,8 @@ snapshot generates.
 ## Links
 
 - API docs: https://docs.dfos.com/api
+- Get a credential (SIWD setup guide): https://docs.dfos.com/docs/developers/sign-in-with-dfos/setup
+- Memberships route reference: https://docs.dfos.com/docs/api/memberships
 - OpenAPI spec: https://api.dfos.com/openapi.json
 - DFOS protocol: https://protocol.dfos.com
 - SIWD demo, end to end: https://github.com/metalabel/dfos/tree/main/examples/siwd-demo
