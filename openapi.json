@@ -2,7 +2,7 @@
   "info": {
     "title": "The DFOS API",
     "version": "1.0.0-beta",
-    "description": "The external HTTP API for Dark Forest OS — space profiles, public feeds, and\npublic posts.\n\nEvery endpoint is a `GET`, and every endpoint is anonymous **except the\ncredential-gated ones**: `GET /profile` serves the profile of the user who\ngranted access, and `GET /memberships` serves the spaces and groups they\nbelong to. Anonymous responses are viewer-independent — the anonymous\naudience is the same for everyone, so there is exactly one correct projection of\nany resource. The credential-gated routes are the deliberate carve-out: their\nbodies are a specific person's data, selected by the credential presented, and\nthey are `no-store` like every other data response.\n\n**Authenticating to the credential-gated routes.** Access is proof-of-possession, not a\nbearer token. The caller presents a durable **credential** the user issued (via\nSign In With DFOS) alongside a fresh **request proof** — a short-lived JWS,\nsigned by the key the credential was issued to, binding this exact method, host,\npath, and body:\n\n```\nAuthorization: DFOS <request-proof JWS>\nX-Credential:  <credential JWS>\n```\n\nNeither works alone: a captured credential is inert without the audience key, and\na captured proof authorizes nothing but the single request it already described,\nfor the seconds its freshness window allows. A proof-layer failure is `401`\nwith a `WWW-Authenticate: DFOS` challenge (sign a correct proof and retry); a\ncredential-layer failure is `403` (the grant does not cover this — retrying\nwill not help). The full byte contract is\n[DFOS API-AUTH](https://protocol.dfos.com/api-auth).\n\nData responses are `no-store` (only the generated spec is CDN-cached), so\nreferenced media in a public post comes back as time-limited SIGNED URLs inline —\nnever persist those, re-fetch the post for fresh ones (see `urlExpiresAt`). A\nnon-public or missing space returns a 404 that is deliberately indistinguishable\nfrom any other — the API never reveals whether a space it won't serve actually\nexists.\n\n**Forward-compatibility — clients MUST:**\n- **Tolerate unknown fields.** New response fields are added without a version\n  bump; ignore fields you don't recognize.\n- **Tolerate unknown enum values.** Enums (e.g. `joinMode`, `siteMode`) can grow\n  new members; treat an unrecognized value as an opaque string, not an error.\n- **Treat cursors as opaque tokens.** Pass `nextCursor`/`previousCursor` back\n  verbatim; never parse or construct a cursor.\n- **Treat subdomains as mutable aliases.** A space's subdomain can change or be\n  reassigned; the space `id` and protocol `did` are the canonical, stable\n  identifiers to store.",
+    "description": "The external HTTP API for Dark Forest OS — space profiles, public feeds, and\npublic posts.\n\nEvery endpoint is a `GET`, and every endpoint is anonymous **except the\ncredential-gated ones**: `GET /profile` serves the profile of the user who\ngranted access, `GET /memberships` and `GET /group-memberships` serve the\nspaces and groups they belong to (with `GET /membership/{space}` and\n`GET /group-membership/{group}` as one-request checks), and\n`GET /credential` describes the presented credential itself. Anonymous\nresponses are viewer-independent — the anonymous\naudience is the same for everyone, so there is exactly one correct projection of\nany resource. The credential-gated routes are the deliberate carve-out: their\nbodies are a specific person's data, selected by the credential presented, and\nthey are `no-store` like every other data response.\n\n**Authenticating to the credential-gated routes.** Access is proof-of-possession, not a\nbearer token. The caller presents a durable **credential** the user issued (via\nSign In With DFOS) alongside a fresh **request proof** — a short-lived JWS,\nsigned by the key the credential was issued to, binding this exact method, host,\npath, and body:\n\n```\nAuthorization: DFOS <request-proof JWS>\nX-Credential:  <credential JWS>\n```\n\nNeither works alone: a captured credential is inert without the audience key, and\na captured proof authorizes nothing but the single request it already described,\nfor the seconds its freshness window allows. A proof-layer failure is `401`\nwith a `WWW-Authenticate: DFOS` challenge (sign a correct proof and retry); a\ncredential-layer failure is `403` (the grant does not cover this — retrying\nwill not help). The full byte contract is\n[DFOS API-AUTH](https://protocol.dfos.com/api-auth).\n\nData responses are `no-store` (only the generated spec is CDN-cached), so\nreferenced media in a public post comes back as time-limited SIGNED URLs inline —\nnever persist those, re-fetch the post for fresh ones (see `urlExpiresAt`). A\nnon-public or missing space returns a 404 that is deliberately indistinguishable\nfrom any other — the API never reveals whether a space it won't serve actually\nexists.\n\n**Forward-compatibility — clients MUST:**\n- **Tolerate unknown fields.** New response fields are added without a version\n  bump; ignore fields you don't recognize.\n- **Tolerate unknown enum values.** Enums (e.g. `joinMode`, `siteMode`) can grow\n  new members; treat an unrecognized value as an opaque string, not an error.\n- **Treat cursors as opaque tokens.** Pass `nextCursor`/`previousCursor` back\n  verbatim; never parse or construct a cursor.\n- **Treat subdomains as mutable aliases.** A space's subdomain can change or be\n  reassigned; the space `id` and protocol `did` are the canonical, stable\n  identifiers to store.",
     "contact": {
       "name": "DFOS",
       "url": "https://docs.dfos.com/api"
@@ -2700,7 +2700,7 @@
             "type": "string",
             "description": "The group's entity id (`group_…`) — canonical and stable.",
             "examples": [
-              "group_6encc4akrze2ah9kntzd9t"
+              "group_79h6z77had2kc68ffdkhac"
             ]
           },
           "did": {
@@ -2763,14 +2763,29 @@
             ],
             "description": "The group's named palette color, or null when unset"
           },
-          "role": {
-            "enum": [
-              "owner",
-              "admin",
-              "member"
-            ],
+          "memberCount": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "EXACT count of the group's active members — not a worded bucket. Spaces publish a worded `memberCountSummary` because a room's population is ambient; a group is an operational unit (the editors, the moderators, a paid tier) whose size has a real answer its own members already know. Reading it requires the `read:memberships` grant that opens this endpoint.",
+            "examples": [
+              7
+            ]
+          },
+          "spaceId": {
             "type": "string",
-            "description": "The subject's role in the group"
+            "description": "Entity id of the space this group belongs to. Correlate with `space.id` on `GET /memberships` to reassemble the full graph.",
+            "examples": [
+              "space_6encc4akrze2ah9kntzd9t"
+            ]
+          },
+          "spaceDid": {
+            "type": "string",
+            "pattern": "^did:dfos:[2346789acdefhknrtvz]{31}$",
+            "description": "Protocol DID of the space this group belongs to — the space's own `did`.",
+            "examples": [
+              "did:dfos:6encc4akrze2ah9kntzd9tc8zr24crc"
+            ]
           }
         },
         "required": [
@@ -2780,7 +2795,9 @@
           "description",
           "avatarUrl",
           "color",
-          "role"
+          "memberCount",
+          "spaceId",
+          "spaceDid"
         ],
         "additionalProperties": false,
         "description": "A group the credential subject belongs to"
@@ -2800,18 +2817,26 @@
             "type": "string",
             "description": "The subject's role in the space"
           },
-          "groups": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/MembershipGroupOutput"
-            },
-            "description": "The subject's ACTIVE group memberships inside this space, in the space's own group order. Empty when they belong to no group in it — a normal state, not an error."
+          "groupCount": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "How many groups the subject belongs to inside this space (ACTIVE group memberships only). Often 0 — most members belong to no group. Walk `GET /group-memberships?space=…` for the groups themselves.",
+            "examples": [
+              2
+            ]
+          },
+          "joinedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When this membership began (ISO 8601 UTC)."
           }
         },
         "required": [
           "space",
           "role",
-          "groups"
+          "groupCount",
+          "joinedAt"
         ],
         "additionalProperties": false,
         "description": "One of the credential subject's space memberships"
@@ -2865,7 +2890,168 @@
           "nextCursor"
         ],
         "additionalProperties": false,
-        "description": "A cursor-paginated page of the credential subject's memberships"
+        "description": "A cursor-paginated page of the credential subject's space memberships"
+      },
+      "GroupMembershipOutput": {
+        "type": "object",
+        "properties": {
+          "group": {
+            "$ref": "#/components/schemas/MembershipGroupOutput"
+          },
+          "role": {
+            "enum": [
+              "owner",
+              "admin",
+              "member"
+            ],
+            "type": "string",
+            "description": "The subject's role in the group"
+          },
+          "joinedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When this group membership began (ISO 8601 UTC)."
+          }
+        },
+        "required": [
+          "group",
+          "role",
+          "joinedAt"
+        ],
+        "additionalProperties": false,
+        "description": "One of the credential subject's group memberships"
+      },
+      "GroupMembershipPageOutput": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GroupMembershipOutput"
+            },
+            "description": "Page of the subject's group memberships"
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Opaque cursor for the next page (null if no more results forward). Pass back verbatim as `after`; do not parse."
+          },
+          "previousCursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Opaque cursor for the previous page (null if at the beginning). Optional — may be omitted on responses that do not support backward paging. Pass back verbatim as `before`; do not parse."
+          },
+          "totalCount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Total count of matching items (null if not computed). Optional — may be omitted entirely; clients must not depend on its presence."
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "additionalProperties": false,
+        "description": "A cursor-paginated page of the credential subject's group memberships"
+      },
+      "PublicCredentialTier": {
+        "enum": [
+          "approved",
+          "jit",
+          "loopback"
+        ],
+        "type": "string",
+        "description": "How the application was resolved when this credential was issued. `approved` = a registered app in the DFOS registry. `jit` = resolved live from the app's `/.well-known/dfos-app.json`. `loopback` = the key-proven local tier: a client on somebody's machine that proved it holds the key the grant is addressed to. An open enum like every enum on this API."
+      },
+      "CredentialIntrospectionOutput": {
+        "type": "object",
+        "properties": {
+          "subjectDid": {
+            "type": "string",
+            "pattern": "^did:dfos:[2346789acdefhknrtvz]{31}$",
+            "description": "Protocol DID of the user who ISSUED this credential — the subject every gated route serves. The same `did` `GET /profile` returns.",
+            "examples": [
+              "did:dfos:6encc4akrze2ah9kntzd9tc8zr24crc"
+            ]
+          },
+          "clientDid": {
+            "type": "string",
+            "pattern": "^did:dfos:[2346789acdefhknrtvz]{31}$",
+            "description": "Protocol DID of the application this credential was issued TO — the audience. A credential is inert without this identity’s key; it is not a bearer token.",
+            "examples": [
+              "did:dfos:6encc4akrze2ah9kntzd9tc8zr24crc"
+            ]
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The actions this grant carries, e.g. `[\"read:profile\",\"read:memberships\"]`, in DFOS’s canonical order. This is the authoritative list — a route refuses with `403` when the action it needs is absent here. Treat unrecognized members as opaque strings.",
+            "examples": [
+              [
+                "read:profile",
+                "read:memberships"
+              ]
+            ]
+          },
+          "tier": {
+            "$ref": "#/components/schemas/PublicCredentialTier"
+          },
+          "domain": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Bare hostname the grant was issued to, or `null`. **A null domain means a LOCAL application** — the `loopback` tier has no domain because a local client proved a key rather than an origin, so there is no hostname that would be true to show. Fall back to `clientDid` rather than inventing one.",
+            "examples": [
+              "example.com"
+            ]
+          },
+          "issuedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the user approved this credential (ISO 8601 UTC)."
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When this credential lapses on its own (ISO 8601 UTC). Expiry is the backstop, not the lever: a user revoking a grant ends it on the app’s very next request, long before this."
+          }
+        },
+        "required": [
+          "subjectDid",
+          "clientDid",
+          "scopes",
+          "tier",
+          "domain",
+          "issuedAt",
+          "expiresAt"
+        ],
+        "additionalProperties": false,
+        "description": "The presented credential, as the DFOS issuance ledger records it"
       }
     }
   },
@@ -2915,6 +3101,10 @@
     {
       "name": "Memberships",
       "description": "The granting user’s spaces and groups — credential-gated (API-AUTH request proof)"
+    },
+    {
+      "name": "Credential",
+      "description": "Introspection of the presented credential — credential-gated, but needs no particular scope"
     },
     {
       "name": "Protocol",
@@ -7088,7 +7278,7 @@
       "get": {
         "operationId": "profile.getOwnProfile",
         "summary": "Get the granting user’s own profile",
-        "description": "Read the profile of the user who issued the presented credential. A credential-gated route: it requires an `Authorization: DFOS <request-proof>` header alongside `X-Credential: <credential>`, per the DFOS API-AUTH specification. The credential selects the subject — there is no path parameter and no way to name another user. Requires the `read:profile` **or** `read:email` action on this host, and the response is assembled from the actions the grant actually carries: the profile fields (`username`, `displayName`, `description`, `createdAt`) under `read:profile`, `email` under `read:email`. Only `did` is unconditional, so a `read:email`-only credential receives `{did, email}`.",
+        "description": "Read the profile of the user who issued the presented credential. A credential-gated route: it requires an `Authorization: DFOS <request-proof>` header alongside `X-Credential: <credential>`, per the DFOS API-AUTH specification. The credential selects the subject — there is no path parameter and no way to name another user. Requires the `read:profile` **or** `read:email` action on this host, and the response is assembled from the actions the grant actually carries: the profile fields (`username`, `displayName`, `description`, `avatarUrl`, `createdAt`) under `read:profile`, `email` under `read:email`. Only `did` is unconditional, so a `read:email`-only credential receives `{did, email}`.",
         "tags": [
           "Profile"
         ],
@@ -7136,6 +7326,17 @@
                         }
                       ],
                       "description": "Profile bio / description, or null. ABSENT (not null) unless the credential carries `read:profile`."
+                    },
+                    "avatarUrl": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "Permanent public CDN URL for the profile avatar, or null when they have none. NOT a signed URL — an avatar is public media, so this link is stable while the media is referenced. ABSENT (not null) unless the credential carries `read:profile`."
                     },
                     "email": {
                       "type": "string",
@@ -7485,21 +7686,42 @@
     "/memberships": {
       "get": {
         "operationId": "memberships.listMemberships",
-        "summary": "List the granting user’s memberships",
-        "description": "The spaces the user who issued the presented credential currently belongs to, cursor-paginated, each with their role and the groups they belong to inside that space. Requires the `read:memberships` action on this host. The credential selects the subject — there is no path parameter and no way to name another user. **Every** current membership is listed, private and unlisted spaces included: that is what the consent line grants. Memberships the user has left, and spaces that were deleted, are not listed. Pass `space` to check a single space instead of walking the whole list.",
+        "summary": "List the granting user’s space memberships",
+        "description": "The spaces the user who issued the presented credential currently belongs to, cursor-paginated, each with their role, how many groups they belong to inside it, and when the membership began. Requires the `read:memberships` action on this host. The credential selects the subject — there is no path parameter and no way to name another user. **Every** current membership is listed, private and unlisted spaces included: that is what the consent line grants. Memberships the user has left, and spaces that were deleted, are not listed. Ordered by `joinedAt` ascending with the space `id` as a stable tiebreak, so a walk never skips or repeats. To check ONE space instead of walking, call `GET /membership/{space}`; for the groups themselves, walk `GET /group-memberships`.",
         "tags": [
           "Memberships"
         ],
         "parameters": [
           {
-            "name": "space",
+            "name": "role",
             "in": "query",
             "schema": {
-              "type": "string",
-              "description": "Check ONE space instead of listing them all: its subdomain, its entity id (`space_…`), or its protocol DID (`did:dfos:` + 31 chars, as emitted in `did`). Returns a single-item page when the subject is a member of that space and an EMPTY page when they are not — never a 404, and never a distinction between \"no such space\" and \"you are not in it\". Hold this value constant while walking pagination cursors; cursors do not encode filters.",
+              "anyOf": [
+                {
+                  "enum": [
+                    "owner",
+                    "admin",
+                    "member"
+                  ],
+                  "type": "string",
+                  "description": "The subject's role in the space"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "owner",
+                      "admin",
+                      "member"
+                    ],
+                    "type": "string",
+                    "description": "The subject's role in the space"
+                  }
+                }
+              ],
+              "description": "Restrict to these roles. REPEATABLE — `?role=owner&role=admin` means either. Omit for every role. Hold it CONSTANT while walking pagination cursors: a cursor encodes a position in the filtered set, not the filter itself.",
               "examples": [
-                "metalabel",
-                "did:dfos:6encc4akrze2ah9kntzd9tc8zr24crc"
+                "owner"
               ]
             },
             "allowEmptyValue": true,
@@ -7554,6 +7776,1629 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/MembershipPageOutput"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": true
+                        },
+                        "code": {
+                          "const": "E_AUTHENTICATION_FAILED"
+                        },
+                        "status": {
+                          "const": 401
+                        },
+                        "message": {
+                          "type": "string",
+                          "default": "The DFOS request proof was missing, malformed, stale, or did not verify. Responses carry `WWW-Authenticate: DFOS`. Sign a fresh proof over this exact method, host, path, and body."
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": false
+                        },
+                        "code": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "number"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": true
+                        },
+                        "code": {
+                          "const": "E_UNAUTHORIZED"
+                        },
+                        "status": {
+                          "const": 403
+                        },
+                        "message": {
+                          "type": "string",
+                          "default": "The request proof verified but the credential does not authorize this request — it is expired, revoked, not issued by this platform, or its attenuation does not cover this action on this host."
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": false
+                        },
+                        "code": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "number"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "413",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": true
+                        },
+                        "code": {
+                          "const": "E_INVALID_REQUEST"
+                        },
+                        "status": {
+                          "const": 413
+                        },
+                        "message": {
+                          "type": "string",
+                          "default": "The request body exceeds the maximum this endpoint will authenticate. A proof binds the body it was signed over, so an unhashable body cannot be authenticated at any size — the cap is refused before the signature is checked, not after."
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": false
+                        },
+                        "code": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "number"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "429",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": true
+                        },
+                        "code": {
+                          "const": "E_RATE_LIMITED"
+                        },
+                        "status": {
+                          "const": 429
+                        },
+                        "message": {
+                          "type": "string",
+                          "default": "Rate limit exceeded — retry after `retryAfterMs`."
+                        },
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "scope": {
+                              "type": "string",
+                              "description": "Which per-IP budget was exhausted"
+                            },
+                            "retryAfterMs": {
+                              "type": "number",
+                              "description": "Milliseconds to wait before retrying"
+                            }
+                          },
+                          "required": [
+                            "scope",
+                            "retryAfterMs"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message",
+                        "data"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": false
+                        },
+                        "code": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "number"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "503",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": true
+                        },
+                        "code": {
+                          "const": "E_SERVICE_UNAVAILABLE"
+                        },
+                        "status": {
+                          "const": 503
+                        },
+                        "message": {
+                          "type": "string",
+                          "default": "Service temporarily unavailable — the rate-limit store was unreachable (fail-closed)."
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": false
+                        },
+                        "code": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "number"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "dfosRequestProof": [],
+            "dfosCredential": []
+          }
+        ]
+      }
+    },
+    "/membership/{space}": {
+      "get": {
+        "operationId": "memberships.getMembership",
+        "summary": "Check one space membership",
+        "description": "Is the user who issued the presented credential a member of this space? Returns the single membership entry when they are, and `404` when they are not. **The `404` is collapsed by design: \"no such space\" and \"the user is not a member\" are deliberately indistinguishable** — this credential discloses the user's own memberships, never the existence of anything else, so the identifier is matched against their membership rows rather than resolved against the platform. This is the gating primitive for a relying party that only needs to ask \"does this user belong to our space\". Requires the `read:memberships` action on this host.",
+        "tags": [
+          "Memberships"
+        ],
+        "parameters": [
+          {
+            "name": "space",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "A space: its subdomain, its entity id (`space_…`), or its protocol DID (`did:dfos:` + 31 chars, as emitted in `did`). Legacy internal DIDs are never accepted.",
+              "examples": [
+                "metalabel",
+                "space_6encc4akrze2ah9kntzd9t",
+                "did:dfos:6encc4akrze2ah9kntzd9tc8zr24crc"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MembershipOutput"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": true
+                        },
+                        "code": {
+                          "const": "E_AUTHENTICATION_FAILED"
+                        },
+                        "status": {
+                          "const": 401
+                        },
+                        "message": {
+                          "type": "string",
+                          "default": "The DFOS request proof was missing, malformed, stale, or did not verify. Responses carry `WWW-Authenticate: DFOS`. Sign a fresh proof over this exact method, host, path, and body."
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": false
+                        },
+                        "code": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "number"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": true
+                        },
+                        "code": {
+                          "const": "E_UNAUTHORIZED"
+                        },
+                        "status": {
+                          "const": 403
+                        },
+                        "message": {
+                          "type": "string",
+                          "default": "The request proof verified but the credential does not authorize this request — it is expired, revoked, not issued by this platform, or its attenuation does not cover this action on this host."
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": false
+                        },
+                        "code": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "number"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": true
+                        },
+                        "code": {
+                          "const": "E_NOT_FOUND"
+                        },
+                        "status": {
+                          "const": 404
+                        },
+                        "message": {
+                          "type": "string",
+                          "default": "Not found. \"No such space or group\" and \"the granting user is not in it\" are deliberately indistinguishable — this credential discloses the user's own memberships, never the existence of anything else."
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": false
+                        },
+                        "code": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "number"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "413",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": true
+                        },
+                        "code": {
+                          "const": "E_INVALID_REQUEST"
+                        },
+                        "status": {
+                          "const": 413
+                        },
+                        "message": {
+                          "type": "string",
+                          "default": "The request body exceeds the maximum this endpoint will authenticate. A proof binds the body it was signed over, so an unhashable body cannot be authenticated at any size — the cap is refused before the signature is checked, not after."
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": false
+                        },
+                        "code": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "number"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "429",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": true
+                        },
+                        "code": {
+                          "const": "E_RATE_LIMITED"
+                        },
+                        "status": {
+                          "const": 429
+                        },
+                        "message": {
+                          "type": "string",
+                          "default": "Rate limit exceeded — retry after `retryAfterMs`."
+                        },
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "scope": {
+                              "type": "string",
+                              "description": "Which per-IP budget was exhausted"
+                            },
+                            "retryAfterMs": {
+                              "type": "number",
+                              "description": "Milliseconds to wait before retrying"
+                            }
+                          },
+                          "required": [
+                            "scope",
+                            "retryAfterMs"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message",
+                        "data"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": false
+                        },
+                        "code": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "number"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "503",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": true
+                        },
+                        "code": {
+                          "const": "E_SERVICE_UNAVAILABLE"
+                        },
+                        "status": {
+                          "const": 503
+                        },
+                        "message": {
+                          "type": "string",
+                          "default": "Service temporarily unavailable — the rate-limit store was unreachable (fail-closed)."
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": false
+                        },
+                        "code": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "number"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "dfosRequestProof": [],
+            "dfosCredential": []
+          }
+        ]
+      }
+    },
+    "/group-memberships": {
+      "get": {
+        "operationId": "memberships.listGroupMemberships",
+        "summary": "List the granting user’s group memberships",
+        "description": "The groups the user who issued the presented credential currently belongs to, across every space, cursor-paginated — each with the group (including its EXACT active member count and flat `spaceId` / `spaceDid` refs), their role in it, and when the membership began. Requires the `read:memberships` action on this host. Pass `space` to scope to one space, `role` to scope to a role set. Ordered by `joinedAt` ascending with the group `id` as a stable tiebreak. Correlate `group.spaceId` with `space.id` from `GET /memberships` to reassemble the full graph — two flat walks rather than one nested page.",
+        "tags": [
+          "Memberships"
+        ],
+        "parameters": [
+          {
+            "name": "space",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "description": "Scope to the groups inside ONE space: its subdomain, its entity id (`space_…`), or its protocol DID. MATCHED against the subject's own memberships, never resolved against the platform — a space the subject is not in and a space that does not exist both yield an EMPTY page, never a 404 and never two distinguishable answers. Hold it constant while walking cursors.",
+              "examples": [
+                "metalabel"
+              ]
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
+          },
+          {
+            "name": "role",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "owner",
+                    "admin",
+                    "member"
+                  ],
+                  "type": "string",
+                  "description": "The subject's role in the group"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "owner",
+                      "admin",
+                      "member"
+                    ],
+                    "type": "string",
+                    "description": "The subject's role in the group"
+                  }
+                }
+              ],
+              "description": "Restrict to these group roles. REPEATABLE — `?role=owner&role=admin` means either. Omit for every role. Hold it CONSTANT while walking pagination cursors.",
+              "examples": [
+                "admin"
+              ]
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "description": "Maximum number of items per page (default: 20, max: 100)",
+              "examples": [
+                20
+              ]
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "description": "Opaque cursor for forward pagination — fetch items after this cursor. Treat as an opaque token: pass back a `nextCursor`/`previousCursor` verbatim; do not parse or construct it (its encoding carries no stability guarantee).",
+              "examples": [
+                "eyJpZCI6InBvc3RfNmVuY2M0YWtyemUyYWg5a250emQ5dCJ9"
+              ]
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "description": "Opaque cursor for backward pagination — fetch items before this cursor. Treat as an opaque token (see `after`).",
+              "examples": [
+                "eyJpZCI6InBvc3RfNmVuY2M0YWtyemUyYWg5a250emQ5dCJ9"
+              ]
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupMembershipPageOutput"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": true
+                        },
+                        "code": {
+                          "const": "E_AUTHENTICATION_FAILED"
+                        },
+                        "status": {
+                          "const": 401
+                        },
+                        "message": {
+                          "type": "string",
+                          "default": "The DFOS request proof was missing, malformed, stale, or did not verify. Responses carry `WWW-Authenticate: DFOS`. Sign a fresh proof over this exact method, host, path, and body."
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": false
+                        },
+                        "code": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "number"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": true
+                        },
+                        "code": {
+                          "const": "E_UNAUTHORIZED"
+                        },
+                        "status": {
+                          "const": 403
+                        },
+                        "message": {
+                          "type": "string",
+                          "default": "The request proof verified but the credential does not authorize this request — it is expired, revoked, not issued by this platform, or its attenuation does not cover this action on this host."
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": false
+                        },
+                        "code": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "number"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "413",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": true
+                        },
+                        "code": {
+                          "const": "E_INVALID_REQUEST"
+                        },
+                        "status": {
+                          "const": 413
+                        },
+                        "message": {
+                          "type": "string",
+                          "default": "The request body exceeds the maximum this endpoint will authenticate. A proof binds the body it was signed over, so an unhashable body cannot be authenticated at any size — the cap is refused before the signature is checked, not after."
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": false
+                        },
+                        "code": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "number"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "429",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": true
+                        },
+                        "code": {
+                          "const": "E_RATE_LIMITED"
+                        },
+                        "status": {
+                          "const": 429
+                        },
+                        "message": {
+                          "type": "string",
+                          "default": "Rate limit exceeded — retry after `retryAfterMs`."
+                        },
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "scope": {
+                              "type": "string",
+                              "description": "Which per-IP budget was exhausted"
+                            },
+                            "retryAfterMs": {
+                              "type": "number",
+                              "description": "Milliseconds to wait before retrying"
+                            }
+                          },
+                          "required": [
+                            "scope",
+                            "retryAfterMs"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message",
+                        "data"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": false
+                        },
+                        "code": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "number"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "503",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": true
+                        },
+                        "code": {
+                          "const": "E_SERVICE_UNAVAILABLE"
+                        },
+                        "status": {
+                          "const": 503
+                        },
+                        "message": {
+                          "type": "string",
+                          "default": "Service temporarily unavailable — the rate-limit store was unreachable (fail-closed)."
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": false
+                        },
+                        "code": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "number"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "dfosRequestProof": [],
+            "dfosCredential": []
+          }
+        ]
+      }
+    },
+    "/group-membership/{group}": {
+      "get": {
+        "operationId": "memberships.getGroupMembership",
+        "summary": "Check one group membership",
+        "description": "Is the user who issued the presented credential a member of this group? Returns the single group-membership entry when they are, and `404` when they are not. **The `404` is collapsed by design: \"no such group\" and \"the user is not a member\" are deliberately indistinguishable** — the identifier is matched against the user's own group memberships rather than resolved against the platform. The symmetric gating primitive to `GET /membership/{space}`, for a relying party gating on a role inside a space rather than on the space itself. Requires the `read:memberships` action on this host.",
+        "tags": [
+          "Memberships"
+        ],
+        "parameters": [
+          {
+            "name": "group",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "A group: its entity id (`group_…`) or its protocol DID (`did:dfos:` + 31 chars, as emitted in `did`). Groups have no subdomain.",
+              "examples": [
+                "group_79h6z77had2kc68ffdkhac",
+                "did:dfos:79h6z77had2kc68ffdkhac9e4tv3rf"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupMembershipOutput"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": true
+                        },
+                        "code": {
+                          "const": "E_AUTHENTICATION_FAILED"
+                        },
+                        "status": {
+                          "const": 401
+                        },
+                        "message": {
+                          "type": "string",
+                          "default": "The DFOS request proof was missing, malformed, stale, or did not verify. Responses carry `WWW-Authenticate: DFOS`. Sign a fresh proof over this exact method, host, path, and body."
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": false
+                        },
+                        "code": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "number"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": true
+                        },
+                        "code": {
+                          "const": "E_UNAUTHORIZED"
+                        },
+                        "status": {
+                          "const": 403
+                        },
+                        "message": {
+                          "type": "string",
+                          "default": "The request proof verified but the credential does not authorize this request — it is expired, revoked, not issued by this platform, or its attenuation does not cover this action on this host."
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": false
+                        },
+                        "code": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "number"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": true
+                        },
+                        "code": {
+                          "const": "E_NOT_FOUND"
+                        },
+                        "status": {
+                          "const": 404
+                        },
+                        "message": {
+                          "type": "string",
+                          "default": "Not found. \"No such space or group\" and \"the granting user is not in it\" are deliberately indistinguishable — this credential discloses the user's own memberships, never the existence of anything else."
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": false
+                        },
+                        "code": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "number"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "413",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": true
+                        },
+                        "code": {
+                          "const": "E_INVALID_REQUEST"
+                        },
+                        "status": {
+                          "const": 413
+                        },
+                        "message": {
+                          "type": "string",
+                          "default": "The request body exceeds the maximum this endpoint will authenticate. A proof binds the body it was signed over, so an unhashable body cannot be authenticated at any size — the cap is refused before the signature is checked, not after."
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": false
+                        },
+                        "code": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "number"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "429",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": true
+                        },
+                        "code": {
+                          "const": "E_RATE_LIMITED"
+                        },
+                        "status": {
+                          "const": 429
+                        },
+                        "message": {
+                          "type": "string",
+                          "default": "Rate limit exceeded — retry after `retryAfterMs`."
+                        },
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "scope": {
+                              "type": "string",
+                              "description": "Which per-IP budget was exhausted"
+                            },
+                            "retryAfterMs": {
+                              "type": "number",
+                              "description": "Milliseconds to wait before retrying"
+                            }
+                          },
+                          "required": [
+                            "scope",
+                            "retryAfterMs"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message",
+                        "data"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": false
+                        },
+                        "code": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "number"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "503",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": true
+                        },
+                        "code": {
+                          "const": "E_SERVICE_UNAVAILABLE"
+                        },
+                        "status": {
+                          "const": 503
+                        },
+                        "message": {
+                          "type": "string",
+                          "default": "Service temporarily unavailable — the rate-limit store was unreachable (fail-closed)."
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": false
+                        },
+                        "code": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "number"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "dfosRequestProof": [],
+            "dfosCredential": []
+          }
+        ]
+      }
+    },
+    "/credential": {
+      "get": {
+        "operationId": "credential.getCredential",
+        "summary": "Describe the presented credential",
+        "description": "Introspect the credential presented on this request: who issued it, which application holds it, what it grants, how that application was resolved, and when it was issued and expires. Credential-gated like every route in this family — an `Authorization: DFOS <request-proof>` header alongside `X-Credential: <credential>` — but it requires **no particular scope**: a credential may always describe itself. Use it at startup to confirm a stored grant is still standing and to discover what it covers before calling a route that needs a scope you may not have. A revoked or expired credential does not describe itself; it is refused with `403` like anywhere else.",
+        "tags": [
+          "Credential"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CredentialIntrospectionOutput"
                 }
               }
             }

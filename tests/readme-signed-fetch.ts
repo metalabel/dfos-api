@@ -20,5 +20,8 @@ const api = createDfosApi({
 
 const { data, error } = await api.GET('/profile');
 const memberships = await api.GET('/memberships');
+const membership = await api.GET('/membership/{space}', {
+  params: { path: { space: 'metalabel' } },
+});
 
-export { data, error, memberships };
+export { data, error, memberships, membership };

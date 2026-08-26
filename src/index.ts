@@ -22,9 +22,11 @@ export interface DfosApiOptions {
 /**
  * Create a typed client for the public DFOS API.
  *
- * Every operation is an anonymous GET except `GET /v1/profile` and
- * `GET /v1/memberships`, which are credential-gated. To call them, pass
- * `createApiAuthFetch({ credential, kid, sign })` from
+ * Every operation is an anonymous GET except the credential-gated family:
+ * `GET /v1/profile`, `GET /v1/credential`, and the membership routes
+ * (`GET /v1/memberships`, `GET /v1/membership/{space}`,
+ * `GET /v1/group-memberships`, `GET /v1/group-membership/{group}`). To call
+ * them, pass `createApiAuthFetch({ credential, kid, sign })` from
  * `@metalabel/dfos-client/api-auth` (v0.33.0+) via the `fetch` option —
  * nothing else about the client changes. See the README's "Signed requests"
  * section.
