@@ -55,6 +55,17 @@ describe('createDfosApi', () => {
     expect(url.searchParams.get('after')).toBe('eyJpZCI6InNwYWNlIn0');
   });
 
+  it('repeats a query parameter for each value of a repeatable filter', async () => {
+    const { calls, fetch } = stubFetch();
+    const api = createDfosApi({ fetch });
+
+    await api.GET('/memberships', { params: { query: { role: ['owner', 'admin'] } } });
+
+    const url = new URL(calls[0]!.url);
+    expect(url.origin + url.pathname).toBe('https://api.dfos.com/v1/memberships');
+    expect(url.searchParams.getAll('role')).toEqual(['owner', 'admin']);
+  });
+
   it('round-trips a typed 200 body as data', async () => {
     const { fetch } = stubFetch({
       relayUrl: 'https://relay.dfos.com',

@@ -85,28 +85,73 @@ the ones it knows, will break on a spec that was never breaking.
 
 ## Signed requests
 
-Two operations are credential-gated: `GET /v1/profile`
-(`profile.getOwnProfile`) and `GET /v1/memberships`
-(`memberships.listMemberships`). Each requires **both** security schemes —
-`dfosRequestProof` and `dfosCredential`, ANDed, so neither artifact works
-alone. Every other operation is an anonymous `GET`: no credentials are required
-or accepted, and the default fetch is all you need.
+Six operations are credential-gated: `GET /v1/profile`
+(`profile.getOwnProfile`), `GET /v1/credential`
+(`credential.getCredential`), and the four membership routes
+(`GET /v1/memberships`, `GET /v1/membership/{space}`,
+`GET /v1/group-memberships`, `GET /v1/group-membership/{group}`). Each requires
+**both** security schemes — `dfosRequestProof` and `dfosCredential`, ANDed, so
+neither artifact works alone. Every other operation is an anonymous `GET`: no
+credentials are required or accepted, and the default fetch is all you need.
 
-Both routes answer about the user who granted you access, and neither takes a
-path parameter, because the credential names the subject:
+Every one of them answers about the user who granted you access — the
+credential names the subject, and no route takes a parameter that could name
+another user:
 
 - **`GET /v1/profile`** is assembled from the actions the grant actually
   carries: the profile fields (`username`, `displayName`, `description`,
-  `createdAt`) are present only under `read:profile`, and `email` only under
-  `read:email` — absent, not null, otherwise. Only `did` is unconditional, so
-  the generated types mark every other field optional. A `read:email`-only
-  credential receives `{ did, email }`.
+  `avatarUrl`, `createdAt`) are present only under `read:profile`, and `email`
+  only under `read:email` — absent, not null, otherwise. Only `did` is
+  unconditional, so the generated types mark every other field optional. A
+  `read:email`-only credential receives `{ did, email }`. `avatarUrl` is a
+  stable public CDN URL, not a signed media URL — it is safe to keep, unlike
+  the ephemeral URLs on post media.
 - **`GET /v1/memberships`** requires `read:memberships` and lists every space
   the user currently belongs to — private and unlisted spaces included; that is
-  what the consent line grants — cursor-paginated, each with the user's role
-  and their groups inside that space. Pass `?space=` to check a single space
-  instead of walking the list. Route reference:
+  what the consent line grants — cursor-paginated. Each item is flat: the
+  space, the user's `role` in it, a `groupCount` of the groups they belong to
+  inside it, and the `joinedAt` the membership began (ISO 8601 UTC). Items are
+  ordered by `joinedAt` ascending with the space `id` as a stable tiebreak, so a
+  walk never skips or repeats. `?role=` is repeatable — `?role=owner&role=admin`
+  means either — and must be held constant while walking cursors. To check one
+  space, call `GET /v1/membership/{space}`; for the groups themselves, walk
+  `GET /v1/group-memberships`. Route reference:
   [docs.dfos.com/docs/api/memberships](https://docs.dfos.com/docs/api/memberships).
+- **`GET /v1/group-memberships`** requires `read:memberships` and is the same
+  flat walk one level down: every group the user belongs to, across every
+  space, cursor-paginated, each with their `role` and `joinedAt`. The `group`
+  carries an exact `memberCount` — groups are operational units, so they get a
+  real number where a space gets a worded bucket — plus flat `spaceId` and
+  `spaceDid` refs. Correlate `group.spaceId` with `space.id` from
+  `GET /v1/memberships` to reassemble the graph: two flat walks rather than one
+  nested page. `?space=` accepts a subdomain, a space entity id, or a DID, and
+  `?role=` is repeatable as above. A `?space=` the user is not in and a
+  `?space=` that does not exist both return an empty page — never a 404, and
+  never two distinguishable answers.
+- **`GET /v1/membership/{space}`** requires `read:memberships` and is the
+  gating primitive for a relying party that only needs to ask whether this user
+  belongs to its space. The path parameter takes a subdomain, a space entity
+  id, or a DID; a 200 carries one membership item, shaped exactly like an item
+  from the list. Everything else is a `404` (`E_NOT_FOUND`), and that 404 is
+  collapsed by design: "no such space" and "the user is not a member" are
+  deliberately indistinguishable. The identifier is matched against the user's
+  own membership rows, never resolved against the platform, so the credential
+  discloses their memberships and nothing about what else exists.
+- **`GET /v1/group-membership/{group}`** requires `read:memberships` and is the
+  symmetric check, for gating on a role inside a space rather than on the space
+  itself. It takes a group entity id or DID — groups have no subdomain — and
+  collapses its `404` the same way.
+- **`GET /v1/credential`** describes the credential presented on the request:
+  `subjectDid`, `clientDid`, the `scopes` it carries, its `tier`, `domain`,
+  `issuedAt`, and `expiresAt`. It is gated like the rest — a valid credential
+  and a fresh proof — but requires **no particular scope**, because a
+  credential may always describe itself. Call it at startup to confirm a stored
+  grant is still standing and to discover what it covers before calling a route
+  whose action you may not hold. `tier` reports how the application was
+  resolved at issuance — values such as `approved`, `jit`, and `loopback` —
+  and, like every enum here, can grow. A null `domain` means a local
+  application: the loopback tier proved a key rather than an origin, so there
+  is no hostname that would be true to show; fall back to `clientDid`.
 
 The user issues the credential to your application through
 [Sign In With DFOS](https://protocol.dfos.com/siwd) — the
@@ -128,9 +173,12 @@ const api = createDfosApi({
 
 const { data, error } = await api.GET('/profile');
 const memberships = await api.GET('/memberships');
+const membership = await api.GET('/membership/{space}', {
+  params: { path: { space: 'metalabel' } },
+});
 ```
 
-The same signing fetch serves both gated routes — which route a call may use is
+The same signing fetch serves every gated route — which route a call may use is
 the credential's business, not the client's.
 
 The adapter signs exactly the `Request` the client composes — method, target,
