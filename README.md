@@ -1,8 +1,11 @@
 # @metalabel/dfos-api
 
 A typed TypeScript client for the public DFOS API at `https://api.dfos.com`.
+The API itself — endpoints, parameters, response shapes — is documented at
+[docs.dfos.com/api](https://docs.dfos.com/api); this package is the typed way
+to call it.
 
-The package is three things and nothing else:
+It is three things and nothing else:
 
 - `openapi.json` — a committed snapshot of the live spec at
   `https://api.dfos.com/openapi.json`.
@@ -69,35 +72,33 @@ The API adds to its responses without bumping a version. Clients must:
 - **Treat subdomains as mutable aliases.** A space's subdomain can change or be
   reassigned. The space `id` and protocol `did` are the canonical, stable
   identifiers to store.
+- **Treat signed media URLs as ephemeral.** Data responses are `no-store`, and
+  media in a public post comes back as time-limited signed URLs (see
+  `urlExpiresAt`). Never persist one; re-fetch the post for fresh URLs.
+- **Expect uninformative 404s.** A non-public or missing space returns a 404
+  deliberately indistinguishable from any other; the API never reveals whether
+  a space it won't serve actually exists.
 
 The generated types are a snapshot of one moment in a growing spec. Code that
 matches exhaustively on an enum, or that assumes a response has no fields beyond
 the ones it knows, will break on a spec that was never breaking.
 
-Two more things worth knowing: data responses are `no-store`, so media in a
-public post comes back as time-limited signed URLs (see `urlExpiresAt`) — never
-persist those, re-fetch the post for fresh ones. And a non-public or missing
-space returns a 404 that is deliberately indistinguishable from any other; the
-API never reveals whether a space it won't serve actually exists.
-
 ## Signed requests
 
-The spec has exactly one credential-gated operation: `GET /v1/profile`
-(`profile.getOwnProfile`), which requires **both** security schemes —
-`dfosRequestProof` and `dfosCredential`, ANDed, so neither artifact works alone.
-Every other operation remains an anonymous `GET`: no credentials are required or
-accepted, and the default fetch is all you need.
+Exactly one operation is credential-gated: `GET /v1/profile`
+(`profile.getOwnProfile`). It requires **both** security schemes —
+`dfosRequestProof` and `dfosCredential`, ANDed, so neither artifact works
+alone. Every other operation is an anonymous `GET`: no credentials are required
+or accepted, and the default fetch is all you need.
 
 `GET /v1/profile` returns the profile of the user who granted you access —
 including their account email — and takes no path parameter, because the
 credential names the subject. Calling it needs a credential carrying the
 `read:profile` action on `api.dfos.com`, which the user issues to your
 application through [Sign In With DFOS](https://protocol.dfos.com/siwd), plus a
-fresh request proof signed per call.
-
-You sign each request with a DFOS key and pass a signing fetch through the
-`fetch` option. `createApiAuthFetch` from `@metalabel/dfos-client` (v0.33.0+)
-builds one from your credential and key:
+fresh request proof signed per call. Both arrive through the `fetch` seam:
+`createApiAuthFetch` from `@metalabel/dfos-client` (v0.33.0+) builds a signing
+fetch from your credential and key:
 
 ```ts
 import { createDfosApi } from '@metalabel/dfos-api';
@@ -111,17 +112,14 @@ const { data, error } = await api.GET('/profile');
 ```
 
 The adapter signs exactly the `Request` the client composes — method, target,
-and body octets — so the bytes the proof covers are the bytes on the wire. It
-buffers request bodies in full (the proof hashes the complete body before
-sending), refuses plaintext requests to non-loopback hosts, and does not follow
-redirects. Underneath it composes `signApiRequest` and `buildApiAuthHeaders`,
-which stay exported for signing backends that describe a request rather than
-receive one.
-
-The signing lives in `@metalabel/dfos-client`, not here — this package stays a
-typed view of the spec. Nothing about the client surface changes for a
-credential-gated endpoint; you pass a different fetch. The byte contract and the
-two headers are specified in [API-AUTH](https://protocol.dfos.com/api-auth).
+and body octets — buffering request bodies in full, refusing plaintext requests
+to non-loopback hosts, and never following redirects. Underneath it composes
+`signApiRequest` and `buildApiAuthHeaders`, which stay exported for signing
+backends that describe a request rather than receive one. The byte contract and
+the two headers are specified in
+[API-AUTH](https://protocol.dfos.com/api-auth); the signing itself lives in
+`@metalabel/dfos-client`, not here — this package stays a typed view of the
+spec.
 
 For a runnable end-to-end example — consent, credential, signed call — see the
 [SIWD demo](https://github.com/metalabel/dfos/tree/main/examples/siwd-demo).
@@ -135,14 +133,13 @@ calls `GET /v1/profile` through this seam.
 pnpm update-spec
 ```
 
-That fetches `https://api.dfos.com/openapi.json`, writes it to `openapi.json`
+That fetches `https://api.dfos.com/openapi.json`, rewrites `openapi.json`
 (2-space indent, trailing newline, so diffs stay readable), and regenerates
-`src/generated/api.ts`. It prints whether anything changed.
-
-A nightly workflow runs the same command and opens a pull request when the
-spec has moved, onto a fixed `spec-update` branch so repeated drift updates one
-PR instead of stacking them. CI checks the reverse direction: the committed
-types must be exactly what the committed snapshot generates.
+`src/generated/api.ts`. A nightly workflow runs the same command and opens a
+pull request onto a fixed `spec-update` branch when the spec has moved, so
+repeated drift updates one PR instead of stacking new ones. CI checks the
+reverse direction: the committed types must be exactly what the committed
+snapshot generates.
 
 ## Links
 
