@@ -42,11 +42,8 @@ major once past 1.0.
 
 ## Docs carry the forward-compat doctrine
 
-The README's forward-compatibility rules bind prose as much as code: never
-document an enum as closed, a response shape as complete, a subdomain as
-stable, or a cursor as parseable. Signed media URLs expire and must not be
-persisted; 404s are deliberately uninformative and should stay described that
-way.
+Prose binds as much as code: never document behavior that contradicts the
+compatibility contract at https://docs.dfos.com/docs/api/compatibility.
 
 ## Checks
 
