@@ -148,21 +148,27 @@ another user:
   credential may always describe itself. Call it at startup to confirm a stored
   grant is still standing and to discover what it covers before calling a route
   whose action you may not hold. `tier` reports how the application was
-  resolved at issuance — values such as `approved`, `jit`, and `loopback` —
-  and, like every enum here, can grow. A null `domain` means a local
+  resolved at issuance — values such as `approved` for a registered
+  application, `jit` for one resolved from its live `dfos-app.json`, and
+  `loopback` for a local key — and, like every enum here, can grow. A null `domain` means a local
   application: the loopback tier proved a key rather than an origin, so there
   is no hostname that would be true to show; fall back to `clientDid`.
 
 The user issues the credential to your application through
-[Sign In With DFOS](https://protocol.dfos.com/siwd) — the
-[setup guide](https://docs.dfos.com/docs/developers/sign-in-with-dfos/setup)
-walks through registering an app and obtaining one. A consent can span several
-scope sets, and the resulting single credential carries the combined action
-list.
+[Sign In With DFOS](https://protocol.dfos.com/siwd). The primary shape is a
+**domain-backed application**: your app is identified by the web origin it
+lives at — registered with the platform ahead of time, or resolved
+just-in-time from a live `dfos-app.json` served at your domain — and the
+credential it receives introspects with that `domain`. The
+[setup recipe](https://docs.dfos.com/docs/developers/sign-in-with-dfos/setup)
+walks the whole path: describing your app, putting it behind your domain or
+registering it, and running the consent flow that yields the credential. A
+consent can span several scope sets, and the resulting single credential
+carries the combined action list.
 
-An application with no domain — a CLI, an agent, a desktop app — obtains its
-credential the same way, under SIWD's **loopback credential tier**: it proves
-control of a client key rather than an origin, and the credential it receives
+Local tools with no domain to stand behind — a CLI, an agent, a desktop app —
+use the same flow under SIWD's **loopback credential tier**: it proves control
+of a client key rather than an origin, and the credential it receives
 introspects with a null `domain`, as above. `dfos login` from the
 [DFOS CLI](https://github.com/metalabel/dfos/tree/main/packages/dfos-cli) is
 the turnkey path — it runs the loopback flow and stores a credential locally,
@@ -224,7 +230,7 @@ snapshot generates.
 ## Links
 
 - API docs: https://docs.dfos.com/api
-- Get a credential (SIWD setup guide): https://docs.dfos.com/docs/developers/sign-in-with-dfos/setup
+- Get a credential (SIWD setup recipe): https://docs.dfos.com/docs/developers/sign-in-with-dfos/setup
 - DFOS CLI (`dfos login`, credentials for local tools): https://github.com/metalabel/dfos/tree/main/packages/dfos-cli
 - Memberships route reference: https://docs.dfos.com/docs/api/memberships
 - OpenAPI spec: https://api.dfos.com/openapi.json
