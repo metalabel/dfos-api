@@ -14,6 +14,12 @@
       "dfosRequestProof": {
         "type": "http",
         "scheme": "dfos",
+        "x-dfos-typ": "did:dfos:request-proof",
+        "x-dfos-actions": {
+          "read:profile": "Read the granting user's own profile — handle, display name, bio, avatar, and join date. The account email address is excluded; that is `read:email`.",
+          "read:email": "Read the granting user's account email address.",
+          "read:memberships": "Read the granting user's own memberships — the spaces and groups the account belongs to, and its roles in them, private and unlisted spaces included."
+        },
         "description": "A request proof: a short-lived JWS signed by the key the credential was issued to, binding this exact method, host, path, and body. Carried as `Authorization: DFOS <jws>`. Deliberately NOT `Bearer` — nothing here is a bearer token, and naming it one invites the logging, caching, and forwarding this artifact exists to make useless. See https://protocol.dfos.com/api-auth."
       },
       "dfosCredential": {
@@ -2974,12 +2980,11 @@
       },
       "PublicCredentialTier": {
         "enum": [
-          "approved",
           "jit",
           "loopback"
         ],
         "type": "string",
-        "description": "How the application was resolved when this credential was issued. `approved` = a registered app in the DFOS registry. `jit` = resolved live from the app's `/.well-known/dfos-app.json`. `loopback` = the key-proven local tier: a client on somebody's machine that proved it holds the key the grant is addressed to. An open enum like every enum on this API."
+        "description": "How the application was resolved when this credential was issued. `jit` = resolved live from the app's `/.well-known/dfos-app.json`, which is how every domain-backed app resolves — there is no registry and no approval gate. `loopback` = the key-proven local tier: a client on somebody's machine that proved it holds the key the grant is addressed to. An open enum like every enum on this API: a member named `approved` existed in an earlier revision and was removed with the registry that backed it; no credential was ever issued under it."
       },
       "CredentialIntrospectionOutput": {
         "type": "object",
@@ -3061,7 +3066,7 @@
   },
   "servers": [
     {
-      "url": "https://api.dfos.com/v1/",
+      "url": "https://api.dfos.com/v1",
       "description": "The DFOS API HTTPS endpoint"
     }
   ],
@@ -7680,6 +7685,10 @@
             "dfosRequestProof": [],
             "dfosCredential": []
           }
+        ],
+        "x-dfos-actions": [
+          "read:profile",
+          "read:email"
         ]
       }
     },
@@ -8103,6 +8112,9 @@
             "dfosRequestProof": [],
             "dfosCredential": []
           }
+        ],
+        "x-dfos-actions": [
+          "read:memberships"
         ]
       }
     },
@@ -8524,6 +8536,9 @@
             "dfosRequestProof": [],
             "dfosCredential": []
           }
+        ],
+        "x-dfos-actions": [
+          "read:memberships"
         ]
       }
     },
@@ -8960,6 +8975,9 @@
             "dfosRequestProof": [],
             "dfosCredential": []
           }
+        ],
+        "x-dfos-actions": [
+          "read:memberships"
         ]
       }
     },
@@ -9380,6 +9398,9 @@
             "dfosRequestProof": [],
             "dfosCredential": []
           }
+        ],
+        "x-dfos-actions": [
+          "read:memberships"
         ]
       }
     },

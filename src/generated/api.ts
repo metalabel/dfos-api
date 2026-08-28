@@ -1450,10 +1450,10 @@ export interface components {
             totalCount?: number | null;
         };
         /**
-         * @description How the application was resolved when this credential was issued. `approved` = a registered app in the DFOS registry. `jit` = resolved live from the app's `/.well-known/dfos-app.json`. `loopback` = the key-proven local tier: a client on somebody's machine that proved it holds the key the grant is addressed to. An open enum like every enum on this API.
+         * @description How the application was resolved when this credential was issued. `jit` = resolved live from the app's `/.well-known/dfos-app.json`, which is how every domain-backed app resolves — there is no registry and no approval gate. `loopback` = the key-proven local tier: a client on somebody's machine that proved it holds the key the grant is addressed to. An open enum like every enum on this API: a member named `approved` existed in an earlier revision and was removed with the registry that backed it; no credential was ever issued under it.
          * @enum {string}
          */
-        PublicCredentialTier: "approved" | "jit" | "loopback";
+        PublicCredentialTier: "jit" | "loopback";
         /** @description The presented credential, as the DFOS issuance ledger records it */
         CredentialIntrospectionOutput: {
             /**

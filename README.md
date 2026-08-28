@@ -52,7 +52,7 @@ Options:
 
 | Option    | Default                    | What it does                                         |
 | --------- | -------------------------- | ---------------------------------------------------- |
-| `baseUrl` | `https://api.dfos.com/v1/` | Point the client at another deployment.              |
+| `baseUrl` | `https://api.dfos.com/v1`  | Point the client at another deployment.              |
 | `fetch`   | the global `fetch`         | Supply your own fetch (see "Signed requests" below). |
 
 Everything else — retries, timeouts, caching — is your fetch's job, not this
@@ -74,6 +74,10 @@ takes an application from zero to a credential,
 covers CLIs and agents with no domain to stand behind, and
 [credentials](https://docs.dfos.com/docs/developers/sign-in-with-dfos/credentials)
 explains what the grant carries.
+
+Which routes are gated, and which actions they require, is declared in the spec
+itself — the machine-readable convention is the "Advertising in OpenAPI"
+section of [API-AUTH](https://protocol.dfos.com/api-auth).
 
 Calling a gated route takes that credential plus a fresh request proof signed
 per call. Both arrive through the `fetch` seam — `createApiAuthFetch` from
