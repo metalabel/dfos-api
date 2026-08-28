@@ -552,6 +552,8 @@ export interface components {
             avatarUrl: string | null;
             /** @description Resolved public CDN URL for the space header/wallpaper image, or null */
             headerUrl: string | null;
+            /** @description An external domain this space has proven control of via origin binding, or null. NOT the same thing as `domain`, which is the space's DFOS subdomain. The claim is a `DfosOrigin` entry on the space's identity chain, and the domain independently publishes the space's DID back — so a third party can verify both halves without trusting this API (see `GET /protocol`). Null when the space claims no domain, has not yet proven a claim, or the domain now attests a different identity. A domain whose attestation has merely gone quiet keeps its value: silence is not a contradiction. */
+            verifiedDomain: string | null;
             /** @description Ordered space profile links (may be empty) */
             links: components["schemas"]["PublicProfileLinkOutput"][];
             /** @description Protocol proof-plane handles for this space's identity and optional profile content chain. Present iff the identity chain exists; absent for legacy identities without a chain. Combine with `GET /protocol` to fetch and verify the chains from the relay. */
@@ -635,6 +637,8 @@ export interface components {
             description: string | null;
             /** @description Resolved public CDN URL for the space avatar, or null */
             avatarUrl: string | null;
+            /** @description An external domain this space has proven control of via origin binding, or null. NOT the same thing as `domain`, which is the space's DFOS subdomain. The claim is a `DfosOrigin` entry on the space's identity chain, and the domain independently publishes the space's DID back — so a third party can verify both halves without trusting this API (see `GET /protocol`). Null when the space claims no domain, has not yet proven a claim, or the domain now attests a different identity. A domain whose attestation has merely gone quiet keeps its value: silence is not a contradiction. */
+            verifiedDomain: string | null;
             /** @description Ordered space profile links (may be empty) */
             links: components["schemas"]["PublicProfileLinkOutput"][];
             /** @description Worded member-count summary (e.g. "a few dozen members"). Public surfaces deliberately avoid exact counts. */
@@ -1193,6 +1197,8 @@ export interface components {
             avatarUrl: string | null;
             /** @description Profile bio / description, or null */
             bio: string | null;
+            /** @description A domain this user has proven control of via origin binding, or null. The claim is a `DfosOrigin` entry on the user's identity chain, and the domain independently publishes the user's DID back — so a third party can verify both halves without trusting this API (see `GET /protocol`). Null when the user claims no domain, has not yet proven a claim, or the domain now attests a different identity. A domain whose attestation has merely gone quiet keeps its value: silence is not a contradiction. */
+            verifiedDomain: string | null;
             /** @description Ordered profile links (may be empty) */
             links: components["schemas"]["PublicProfileLinkOutput"][];
             /** @description Protocol proof-plane handles for this user's identity and optional profile content chain. Present iff the identity chain exists; absent for legacy identities without a chain. Combine with `GET /protocol` to fetch and verify the chains from the relay. */
@@ -1223,6 +1229,8 @@ export interface components {
             avatarUrl: string | null;
             /** @description Profile bio / description, or null */
             bio: string | null;
+            /** @description A domain this user has proven control of via origin binding, or null. The claim is a `DfosOrigin` entry on the user's identity chain, and the domain independently publishes the user's DID back — so a third party can verify both halves without trusting this API (see `GET /protocol`). Null when the user claims no domain, has not yet proven a claim, or the domain now attests a different identity. A domain whose attestation has merely gone quiet keeps its value: silence is not a contradiction. */
+            verifiedDomain: string | null;
             /** @description Ordered profile links (may be empty) */
             links: components["schemas"]["PublicProfileLinkOutput"][];
             /** @description The user's pinned spaces in slot order (may be empty). Terse cards — fetch the profile for the full membership shelf. */
