@@ -9,6 +9,8 @@
     "lib": ["ES2022", "DOM"],
     "noEmit": true,
     "skipLibCheck": true,
+    "allowJs": true,
+    "checkJs": true,
     "resolveJsonModule": true,
     "forceConsistentCasingInFileNames": true,
 
@@ -23,5 +25,5 @@
     "noUncheckedIndexedAccess": true,
     "noImplicitReturns": true
   },
-  "include": ["src", "tests", "tsup.config.ts", "vitest.config.ts"]
+  "include": ["src", "tests", "scripts", "tsup.config.ts", "vitest.config.ts"]
 }

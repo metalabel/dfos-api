@@ -11,6 +11,10 @@ import { fileURLToPath } from 'node:url';
 const SPEC_URL = 'https://api.dfos.com/openapi.json';
 const OUT_PATH = join(dirname(fileURLToPath(import.meta.url)), '..', 'openapi.json');
 
+/**
+ * @param {string} message
+ * @returns {never}
+ */
 function fail(message) {
   console.error(`update-spec: ${message}`);
   process.exit(1);
@@ -29,7 +33,7 @@ const body = await response.text();
 let spec;
 try {
   spec = JSON.parse(body);
-} catch (error) {
+} catch (/** @type {any} */ error) {
   fail(`${SPEC_URL} did not return valid JSON: ${error.message}`);
 }
 
