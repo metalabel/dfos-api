@@ -49,3 +49,13 @@ compatibility contract at https://docs.dfos.com/docs/api/compatibility.
 
 `pnpm typecheck && pnpm test && pnpm build`, plus `pnpm generate` leaving a
 clean `git diff` — the same four gates CI runs.
+
+## Two TypeScript compilers, on purpose
+
+Type-checking runs the native TS7 compiler (the `typescript7` devDep, an npm
+alias for `typescript@7`) via explicit bin path in the `typecheck` script —
+never bare `tsc`, whose `.bin` shim is whichever package pnpm linked last.
+Everything that consumes the TypeScript *API* — tsup's dts emit,
+openapi-typescript — stays on the stable `typescript` devDep until TS 7.1
+ships a stable programmatic API. Don't "clean up" the alias into a single
+dependency, and don't point emit or generation at TS7.
