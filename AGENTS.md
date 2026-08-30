@@ -5,12 +5,13 @@ covers what the package is; this covers what must stay true while touching it.
 
 ## Derived files are never hand-edited
 
-`openapi.json` is a snapshot of `https://api.dfos.com/openapi.json`, and
-`src/generated/api.ts` is what openapi-typescript generates from that snapshot.
-`pnpm update-spec` is the only writer of both. Never edit either by hand — not
-to fix a typo, not to patch a type. If the spec looks wrong, the fix belongs in
-the API; this repo picks it up on the next refresh. CI regenerates from the
-committed snapshot and fails on any divergence, so a hand edit cannot merge.
+`openapi.json` is a snapshot of the platform contract (the same document the
+API serves at `https://api.dfos.com/openapi.json`), and `src/generated/api.ts`
+is what openapi-typescript generates from that snapshot. `pnpm update-spec` is
+the only writer of both. Never edit either by hand — not to fix a typo, not to
+patch a type. If the spec looks wrong, the fix belongs in the API; this repo
+picks it up on the next refresh. CI regenerates from the committed snapshot and
+fails on any divergence, so a hand edit cannot merge.
 
 ## Scope is fixed
 
@@ -20,14 +21,19 @@ convenience helpers belong to the caller's fetch; request signing belongs to
 `@metalabel/dfos-client`. Decline additions that grow the surface — the value
 of this package is that it has nothing to maintain.
 
-## Spec drift flows through one branch
+## Spec sync is request-driven
 
-A nightly workflow refreshes the snapshot and force-pushes a fixed
-`spec-update` branch, so repeated drift updates one PR instead of stacking
-them. CI does not run on that PR (GitHub blocks workflow recursion for PRs
-opened with `GITHUB_TOKEN`) — the typecheck/test/build gate ran in the job
-that opened it. Review the type diff for what a consumer would notice:
-removed fields and narrowed types are breaking, added ones are not.
+There is no polling automation. `pnpm update-spec` generates the spec from a
+local checkout of the platform monorepo (`DFOS_PLATFORM_REPO`, default a
+`metalabel-dfos` sibling of this repo) — merge truth, not deploy truth — so a
+re-sync lands the moment a contract change merges, deploy-independent.
+Platform sessions request a re-sync when a change alters the published spec
+(the platform repo's `dfos-dev-external-api` skill carries that instruction);
+on request, run `pnpm update-spec` → review the type diff → PR → release per
+the normal governance here. Review the diff for what a consumer would notice:
+removed fields and narrowed types are breaking, added ones are not. Because
+the snapshot tracks the merged contract, it may briefly describe endpoints
+not yet deployed — accepted pre-1.0, noted in the README, no machinery.
 
 ## Releases are deliberate
 
