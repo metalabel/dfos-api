@@ -43,8 +43,9 @@ jobs:
         run: pnpm build
 
       # The committed types must be exactly what the committed snapshot
-      # generates. This does NOT hit the network — spec drift is a separate
-      # workflow; this only catches a hand-edited or stale src/generated.
+      # generates. This does NOT hit the network — snapshot refreshes are
+      # request-driven via `pnpm update-spec`; this only catches a
+      # hand-edited or stale src/generated.
       - name: Generated types match the committed snapshot
         run: |
           pnpm generate

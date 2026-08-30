@@ -7,8 +7,8 @@ to call it.
 
 It is three things and nothing else:
 
-- `openapi.json` — a committed snapshot of the live spec at
-  `https://api.dfos.com/openapi.json`.
+- `openapi.json` — a committed snapshot of the API's OpenAPI spec (the same
+  document served at `https://api.dfos.com/openapi.json`).
 - `src/generated/api.ts` — types generated from that snapshot by
   [openapi-typescript](https://openapi-ts.dev). Committed, so the diff in a spec
   refresh shows what actually changed at the type level.
@@ -115,13 +115,16 @@ without notice and what never will — is
 pnpm update-spec
 ```
 
-That fetches `https://api.dfos.com/openapi.json`, rewrites `openapi.json`
-(2-space indent, trailing newline, so diffs stay readable), and regenerates
-`src/generated/api.ts`. A nightly workflow runs the same command and opens a
-pull request onto a fixed `spec-update` branch when the spec has moved, so
-repeated drift updates one PR instead of stacking new ones. CI checks the
-reverse direction: the committed types must be exactly what the committed
-snapshot generates.
+That regenerates the spec from the platform monorepo's contract (a local
+checkout, `DFOS_PLATFORM_REPO`, default `../metalabel-dfos` — maintainers
+only), rewrites `openapi.json` (2-space indent, trailing newline, so diffs
+stay readable), and regenerates `src/generated/api.ts`. Pass `--live` to
+fetch the deployed spec at `https://api.dfos.com/openapi.json` instead.
+Refreshes are request-driven from the platform repo rather than polled on a
+schedule, and track the merged contract rather than the deployed API — so
+pre-1.0, a fresh snapshot may briefly describe an endpoint that has merged
+but not yet deployed. CI checks the reverse direction: the committed types
+must be exactly what the committed snapshot generates.
 
 ## Links
 
