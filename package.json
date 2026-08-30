@@ -39,7 +39,7 @@
   "scripts": {
     "build": "tsup",
     "clean": "rm -rf dist",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "node node_modules/typescript7/bin/tsc --noEmit",
     "test": "vitest run",
     "generate": "openapi-typescript openapi.json -o src/generated/api.ts",
     "update-spec": "node scripts/update-spec.mjs && pnpm generate",
@@ -59,6 +59,7 @@
     "openapi-typescript": "^7.10.0",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3",
+    "typescript7": "npm:typescript@7.0.2",
     "vitest": "^4.1.8"
   }
 }
