@@ -1329,7 +1329,7 @@
           "place"
         ]
       },
-      "PublicEventSpaceOutput": {
+      "PublicSpaceRefOutput": {
         "type": "object",
         "properties": {
           "id": {
@@ -1377,7 +1377,7 @@
           "avatarUrl"
         ],
         "additionalProperties": false,
-        "description": "The space an event belongs to"
+        "description": "The space an item belongs to"
       },
       "PublicProductPriceOutput": {
         "type": "object",
@@ -1526,7 +1526,7 @@
             ]
           },
           "space": {
-            "$ref": "#/components/schemas/PublicEventSpaceOutput"
+            "$ref": "#/components/schemas/PublicSpaceRefOutput"
           },
           "title": {
             "type": "string",
@@ -1812,6 +1812,31 @@
         "additionalProperties": false,
         "description": "A cursor-paginated page of public topics"
       },
+      "PublicProductReleaseRefOutput": {
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string",
+            "description": "The release's public page slug — hand it to `GET /spaces/{space}/releases/{slug}` for the full page. Mutable, like every slug here.",
+            "examples": [
+              "blue-record"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "description": "Release name",
+            "examples": [
+              "Blue Record"
+            ]
+          }
+        },
+        "required": [
+          "slug",
+          "name"
+        ],
+        "additionalProperties": false,
+        "description": "The release a product belongs to"
+      },
       "PublicProductOutput": {
         "type": "object",
         "properties": {
@@ -1955,6 +1980,18 @@
             ],
             "additionalProperties": false,
             "description": "The next upcoming PUBLIC event occurrence this product admits, when one exists — a ticket product’s backlink to what it sells entry to. SINGULAR BY DESIGN: a product may admit several events (a season pass), and this names the SOONEST upcoming occurrence across all of them — the one date a purchase page should send a buyer to — never a claim that only one event is admitted. Read the events namespace for the full relation. Absent when the product is not a ticket, when its ticket binding has been detached, when the event it admits is not publicly visible, and when no occurrence falls inside the window this API serves (the same ~1 year the events routes look ahead)."
+          },
+          "release": {
+            "$ref": "#/components/schemas/PublicProductReleaseRefOutput",
+            "description": "The release this product belongs to, when a publicly-visible one holds it — a one-line context chip, not a projection of the release. SINGULAR: a product composed into several releases carries the EARLIEST-published public one (ties broken by release id). Absent when the product is in no release, and equally absent when every release holding it is in a draft, preview or archived phase or is scoped to members or a group — the two are deliberately indistinguishable. Read `GET /spaces/{space}/releases/{slug}` for the release itself."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the product was created (ISO 8601 UTC). The cross-space index `GET /products` is ordered by this value, newest first. It is the row's own creation stamp — NOT \"when it was published\", which this surface does not record, and not a position in any catalog.",
+            "examples": [
+              "2026-09-01T17:00:00.000Z"
+            ]
           }
         },
         "required": [
@@ -1968,7 +2005,8 @@
           "available",
           "isSoldOut",
           "purchasable",
-          "sortOrder"
+          "sortOrder",
+          "createdAt"
         ],
         "additionalProperties": false,
         "description": "A store product with a public purchase page"
@@ -2023,6 +2061,1007 @@
         ],
         "additionalProperties": false,
         "description": "A cursor-paginated page of public products"
+      },
+      "PublicProductFeedItemOutput": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Stable store-product id. Store this identifier; the slug may change.",
+            "examples": [
+              "sprod_6encc4akrze2ah9kntzd9t"
+            ]
+          },
+          "slug": {
+            "type": "string",
+            "description": "The product's public purchase-page slug (the `/p/{slug}` segment on the space site). Mutable — changing it breaks old links with no redirect; store the `id`.",
+            "examples": [
+              "softr-ticket"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "description": "Product name",
+            "examples": [
+              "SOFTR Ticket"
+            ]
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Seller-authored plain-text description. Newlines are significant; render with preserved whitespace."
+          },
+          "kind": {
+            "enum": [
+              "digital",
+              "physical"
+            ],
+            "type": "string",
+            "description": "What the product delivers. Open enum — treat an unrecognized value as an opaque string."
+          },
+          "image": {
+            "$ref": "#/components/schemas/PublicMediaOutput",
+            "description": "Hero image, when the product has one. Always a PUBLIC, permanently-hosted CDN image — this endpoint never emits a signed or expiring URL."
+          },
+          "prices": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PublicProductPriceOutput"
+            },
+            "description": "Every purchasable price tier, one-time and recurring alike. Multiple tiers are normal (e.g. a one-time price alongside a monthly subscription)."
+          },
+          "purchaseGrantsMembership": {
+            "type": "boolean",
+            "description": "Whether buying this product makes the buyer a member of the space. A PRODUCT fact, identical for every caller — it says what the purchase does, not what any particular viewer would get from it (a caller who is already a member gains nothing new, and this field does not know or say so)."
+          },
+          "available": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Remaining stock, or null when the product has unlimited stock. Advisory only — availability is re-checked at purchase."
+          },
+          "isSoldOut": {
+            "type": "boolean",
+            "description": "True when limited stock is exhausted (`available` <= 0)."
+          },
+          "purchasable": {
+            "type": "boolean",
+            "description": "Whether a purchase can be STARTED right now. False when the platform payment rail is paused or the product has no completable price tier — render an unavailable state rather than a dead buy button. Independent of `isSoldOut`, which has its own message."
+          },
+          "sortOrder": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "This product's position in the space's public product list, counting from 0 — LOWER SORTS FIRST. Dense and contiguous across the whole list (0, 1, 2, …) and meaningful only within one space; products with no public page are not counted, so this reveals nothing about a space's unpublished catalog. The index is ordered by this field. It is a POSITION, not a stable identifier — publishing, unpublishing, or reordering shifts it, so never store it as a key.",
+            "examples": [
+              0
+            ]
+          },
+          "ticketFor": {
+            "type": "object",
+            "properties": {
+              "seriesId": {
+                "type": "string",
+                "description": "The event series this product admits — the same `seriesId` the events namespace emits.",
+                "examples": [
+                  "evt_6encc4akrze2ah9kntzd9t"
+                ]
+              },
+              "recurrenceId": {
+                "type": "string",
+                "description": "RFC 5545 RECURRENCE-ID of the NEXT upcoming occurrence: its local wall-time (`YYYY-MM-DDTHH:MM:SS`), or its date (`YYYY-MM-DD`) for an all-day event. Byte-identical to the events namespace's value for the same occurrence.",
+                "examples": [
+                  "2026-08-15T19:00:00"
+                ]
+              },
+              "startsAt": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "That occurrence's resolved start instant (ISO 8601 UTC). Null for an all-day event.",
+                "examples": [
+                  "2026-08-16T00:00:00.000Z"
+                ]
+              },
+              "startDate": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "All-day only: that occurrence's start date (`YYYY-MM-DD`). Null for a timed event.",
+                "examples": [
+                  "2026-08-15"
+                ]
+              }
+            },
+            "required": [
+              "seriesId",
+              "recurrenceId",
+              "startsAt",
+              "startDate"
+            ],
+            "additionalProperties": false,
+            "description": "The next upcoming PUBLIC event occurrence this product admits, when one exists — a ticket product’s backlink to what it sells entry to. SINGULAR BY DESIGN: a product may admit several events (a season pass), and this names the SOONEST upcoming occurrence across all of them — the one date a purchase page should send a buyer to — never a claim that only one event is admitted. Read the events namespace for the full relation. Absent when the product is not a ticket, when its ticket binding has been detached, when the event it admits is not publicly visible, and when no occurrence falls inside the window this API serves (the same ~1 year the events routes look ahead)."
+          },
+          "release": {
+            "$ref": "#/components/schemas/PublicProductReleaseRefOutput",
+            "description": "The release this product belongs to, when a publicly-visible one holds it — a one-line context chip, not a projection of the release. SINGULAR: a product composed into several releases carries the EARLIEST-published public one (ties broken by release id). Absent when the product is in no release, and equally absent when every release holding it is in a draft, preview or archived phase or is scoped to members or a group — the two are deliberately indistinguishable. Read `GET /spaces/{space}/releases/{slug}` for the release itself."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the product was created (ISO 8601 UTC). The cross-space index `GET /products` is ordered by this value, newest first. It is the row's own creation stamp — NOT \"when it was published\", which this surface does not record, and not a position in any catalog.",
+            "examples": [
+              "2026-09-01T17:00:00.000Z"
+            ]
+          },
+          "space": {
+            "$ref": "#/components/schemas/PublicSpaceRefOutput"
+          }
+        },
+        "required": [
+          "id",
+          "slug",
+          "name",
+          "description",
+          "kind",
+          "prices",
+          "purchaseGrantsMembership",
+          "available",
+          "isSoldOut",
+          "purchasable",
+          "sortOrder",
+          "createdAt",
+          "space"
+        ],
+        "additionalProperties": false,
+        "description": "A public product with the space it belongs to"
+      },
+      "PublicProductFeedPageOutput": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PublicProductFeedItemOutput"
+            },
+            "description": "Page of public products across every publicly-discoverable space"
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Opaque cursor for the next page (null if no more results forward). Pass back verbatim as `after`; do not parse."
+          },
+          "previousCursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Opaque cursor for the previous page (null if at the beginning). Optional — may be omitted on responses that do not support backward paging. Pass back verbatim as `before`; do not parse."
+          },
+          "totalCount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Total count of matching items (null if not computed). Optional — may be omitted entirely; clients must not depend on its presence."
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "additionalProperties": false,
+        "description": "A cursor-paginated page of cross-space public products"
+      },
+      "PublicReleaseStatus": {
+        "enum": [
+          "presale",
+          "live",
+          "closed"
+        ],
+        "type": "string",
+        "description": "Where the release is in its public life. `presale` = announced, selling ahead of the date; `live` = out; `closed` = the run has ended and the page is archival. Open enum — treat an unrecognized value as an opaque string."
+      },
+      "PublicReleaseCreditOutput": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Stable credit id.",
+            "examples": [
+              "relcred_6encc4akrze2ah9kntzd9t"
+            ]
+          },
+          "displayName": {
+            "type": "string",
+            "description": "The credited name, exactly as the release renders it.",
+            "examples": [
+              "Lena Ortiz"
+            ]
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What they did. Free text authored by the runner, never an enum — \"mastering\", \"cover photograph\", \"with thanks to\".",
+            "examples": [
+              "mastering"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "displayName",
+          "role"
+        ],
+        "additionalProperties": false,
+        "description": "A credit on a release"
+      },
+      "PublicReleaseMediaOutput": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Stable wall-entry id (not the media id — that is `media.id`).",
+            "examples": [
+              "relmed_6encc4akrze2ah9kntzd9t"
+            ]
+          },
+          "caption": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Runner-authored caption for this entry, when there is one."
+          },
+          "media": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Media object id — the value an `attachment://<id>` inline body token references. Use it to associate a body token with its entry in `bodyMedia` (required when a body carries more than one inline media item). Media ids already appear verbatim in the body markdown, so this exposes nothing new.",
+                "examples": [
+                  "media_6encc4akrze2ah9kntzd9t"
+                ]
+              },
+              "filename": {
+                "type": "string",
+                "description": "Original uploaded filename of the media object"
+              },
+              "url": {
+                "type": "string",
+                "description": "Resolved URL for the media object. A permanent, unsigned imgix CDN URL for public images; a time-limited SIGNED URL for private media (audio/video/files). When signed, `urlExpiresAt` is present — never persist a signed URL, re-fetch the post for a fresh one."
+              },
+              "contentType": {
+                "type": "string",
+                "description": "MIME type of the media object"
+              },
+              "contentLength": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "Size of the media object in bytes (absent until upload is finalized)"
+              },
+              "width": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991,
+                "description": "Pixel width (images/video)"
+              },
+              "height": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991,
+                "description": "Pixel height (images/video)"
+              },
+              "blurHash": {
+                "type": "string",
+                "description": "Blur-hash placeholder string for progressive image loading"
+              },
+              "alt": {
+                "type": "string",
+                "description": "Uploader-authored caption / alt text, when present"
+              },
+              "durationMs": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "Playback length in milliseconds (audio/video only)"
+              },
+              "posterUrl": {
+                "type": "string",
+                "description": "CDN URL of an extracted poster frame / cover art (audio/video only)"
+              },
+              "playbackUrl": {
+                "type": "string",
+                "description": "Streamable MP4 rendition URL (audio/video only). A permanent CDN URL for public media; a time-limited SIGNED URL for private media (in which case `urlExpiresAt` is present)."
+              },
+              "urlExpiresAt": {
+                "type": "string",
+                "format": "date-time",
+                "description": "When the SIGNED `url` / `playbackUrl` expire (ISO 8601 UTC). PRESENT iff those URLs are time-limited signed URLs (private media); ABSENT means they are permanent (public images). Never persist a signed URL — re-fetch the post to obtain fresh ones."
+              },
+              "waveformPeaks": {
+                "type": "array",
+                "maxItems": 200,
+                "items": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 100
+                },
+                "description": "Amplitude overview for audio — up to 200 integers, each 0–100"
+              }
+            },
+            "required": [
+              "id",
+              "filename",
+              "url",
+              "contentType"
+            ],
+            "additionalProperties": false,
+            "description": "The asset. Always a PUBLIC, permanently-hosted CDN image — this endpoint never emits a signed or expiring URL, so a wall entry whose asset is private media is omitted from the wall entirely rather than served with an expiring link."
+          }
+        },
+        "required": [
+          "id",
+          "caption",
+          "media"
+        ],
+        "additionalProperties": false,
+        "description": "An entry on a release media wall"
+      },
+      "PublicReleaseEventOutput": {
+        "type": "object",
+        "properties": {
+          "seriesId": {
+            "type": "string",
+            "description": "The event series — the same `seriesId` the events namespace emits.",
+            "examples": [
+              "evt_6encc4akrze2ah9kntzd9t"
+            ]
+          },
+          "recurrenceId": {
+            "type": "string",
+            "description": "RFC 5545 RECURRENCE-ID of the occurrence: its local wall-time (`YYYY-MM-DDTHH:MM:SS`), or its date (`YYYY-MM-DD`) for an all-day event. Byte-identical to the events namespace's value for the same occurrence.",
+            "examples": [
+              "2026-09-12T19:00:00"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "description": "Event title",
+            "examples": [
+              "Listening party"
+            ]
+          },
+          "isAllDay": {
+            "type": "boolean",
+            "description": "True for a date-based occurrence: `startDate` carries the date and `startsAt` is null. False for a timed one, where the reverse holds."
+          },
+          "timeZone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Timed only: the IANA zone the event was authored in — the zone `recurrenceId` is expressed in. Null for an all-day event.",
+            "examples": [
+              "America/New_York"
+            ]
+          },
+          "startsAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "That occurrence's resolved start instant (ISO 8601 UTC). Null for an all-day event.",
+            "examples": [
+              "2026-09-13T00:00:00.000Z"
+            ]
+          },
+          "startDate": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "All-day only: that occurrence's start date (`YYYY-MM-DD`). Null for a timed event.",
+            "examples": [
+              "2026-09-12"
+            ]
+          }
+        },
+        "required": [
+          "seriesId",
+          "recurrenceId",
+          "title",
+          "isAllDay",
+          "timeZone",
+          "startsAt",
+          "startDate"
+        ],
+        "additionalProperties": false,
+        "description": "A public calendar event a release points at"
+      },
+      "PublicReleaseSummaryOutput": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Stable release id. Store this identifier; the slug may change.",
+            "examples": [
+              "rel_6encc4akrze2ah9kntzd9t"
+            ]
+          },
+          "slug": {
+            "type": "string",
+            "description": "The release's public page slug (the `/r/{slug}` segment on the space site). Mutable — changing it breaks old links with no redirect; store the `id`.",
+            "examples": [
+              "blue-record"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "description": "Release name",
+            "examples": [
+              "Blue Record"
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/PublicReleaseStatus"
+          },
+          "shortDescription": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "One-line blurb. Newlines are not expected here; render as a single line of text."
+          },
+          "cover": {
+            "$ref": "#/components/schemas/PublicMediaOutput",
+            "description": "Cover image, when the release has one. Always a PUBLIC, permanently-hosted CDN image — this endpoint never emits a signed or expiring URL."
+          },
+          "catalogNumber": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The space's own catalog expression (\"MTL-001\", \"no. 4\"). NOT A KEY: free text, deliberately un-unique — runners reuse it, re-number, and leave gaps. Render it; never index on it.",
+            "examples": [
+              "MTL-001"
+            ]
+          },
+          "releaseDate": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The release's own date as a bare calendar date, `YYYY-MM-DD`, with NO time zone — the all-day convention, because a release date is a date everywhere rather than an instant somewhere. Null when the release is undated. Unrelated to `firstPublishedAt`, which is when this PAGE first became public.",
+            "examples": [
+              "2026-09-12"
+            ]
+          },
+          "location": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Freeform place string, purely presentational. Never geocoded, never a key.",
+            "examples": [
+              "Austin, TX"
+            ]
+          },
+          "firstPublishedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When this release FIRST became public (ISO 8601 UTC), stamped once and never re-stamped — taking a release down and putting it back must not reshuffle a reader's shelf. The index is ordered by this value, newest first. Null only for a release that reached a public phase without ever being stamped.",
+            "examples": [
+              "2026-09-01T17:00:00.000Z"
+            ]
+          },
+          "productCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "How many products in the composition are PUBLICLY purchasable — the same set the release page lists, counted. Never the raw composition size, which would disclose how much of a release a space has not published.",
+            "examples": [
+              2
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "slug",
+          "name",
+          "status",
+          "shortDescription",
+          "catalogNumber",
+          "releaseDate",
+          "location",
+          "firstPublishedAt",
+          "productCount"
+        ],
+        "additionalProperties": false,
+        "description": "A release in a space public release shelf"
+      },
+      "PublicReleaseOutput": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Stable release id. Store this identifier; the slug may change.",
+            "examples": [
+              "rel_6encc4akrze2ah9kntzd9t"
+            ]
+          },
+          "slug": {
+            "type": "string",
+            "description": "The release's public page slug (the `/r/{slug}` segment on the space site). Mutable — changing it breaks old links with no redirect; store the `id`.",
+            "examples": [
+              "blue-record"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "description": "Release name",
+            "examples": [
+              "Blue Record"
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/PublicReleaseStatus"
+          },
+          "shortDescription": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "One-line blurb. Newlines are not expected here; render as a single line of text."
+          },
+          "cover": {
+            "$ref": "#/components/schemas/PublicMediaOutput",
+            "description": "Cover image, when the release has one. Always a PUBLIC, permanently-hosted CDN image — this endpoint never emits a signed or expiring URL."
+          },
+          "catalogNumber": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The space's own catalog expression (\"MTL-001\", \"no. 4\"). NOT A KEY: free text, deliberately un-unique — runners reuse it, re-number, and leave gaps. Render it; never index on it.",
+            "examples": [
+              "MTL-001"
+            ]
+          },
+          "releaseDate": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The release's own date as a bare calendar date, `YYYY-MM-DD`, with NO time zone — the all-day convention, because a release date is a date everywhere rather than an instant somewhere. Null when the release is undated. Unrelated to `firstPublishedAt`, which is when this PAGE first became public.",
+            "examples": [
+              "2026-09-12"
+            ]
+          },
+          "location": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Freeform place string, purely presentational. Never geocoded, never a key.",
+            "examples": [
+              "Austin, TX"
+            ]
+          },
+          "firstPublishedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When this release FIRST became public (ISO 8601 UTC), stamped once and never re-stamped — taking a release down and putting it back must not reshuffle a reader's shelf. The index is ordered by this value, newest first. Null only for a release that reached a public phase without ever being stamped.",
+            "examples": [
+              "2026-09-01T17:00:00.000Z"
+            ]
+          },
+          "productCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "How many products in the composition are PUBLICLY purchasable — the same set the release page lists, counted. Never the raw composition size, which would disclose how much of a release a space has not published.",
+            "examples": [
+              2
+            ]
+          },
+          "longDescription": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Long-form release copy. Newlines are significant; render with preserved whitespace."
+          },
+          "media": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PublicReleaseMediaOutput"
+            },
+            "description": "The media wall, in the runner's wall order. Entries whose asset is private media are omitted (this surface emits no signed URLs), so an empty wall is a valid answer."
+          },
+          "credits": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PublicReleaseCreditOutput"
+            },
+            "description": "Credits, in credit order. Only accepted and text-only credits appear — a pending or declined invitation is absent, and is indistinguishable from a credit that was never offered."
+          },
+          "products": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PublicProductOutput"
+            },
+            "description": "The composed products, in the release's curated order — the SAME objects `products.getProduct` returns, filtered by the store's own public-visibility rule. A product with no public purchase page is absent from this list while the release page renders normally, and is not counted in `productCount`."
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PublicReleaseEventOutput"
+            },
+            "description": "Public calendar events this release points at, soonest first — both the ones the release emitted as phase milestones and organic events attached to it. Each is filtered by the EVENTS visibility rules; an event an anonymous caller may not see, or one with no occurrence in the window this API serves, is simply absent."
+          }
+        },
+        "required": [
+          "id",
+          "slug",
+          "name",
+          "status",
+          "shortDescription",
+          "catalogNumber",
+          "releaseDate",
+          "location",
+          "firstPublishedAt",
+          "productCount",
+          "longDescription",
+          "media",
+          "credits",
+          "products",
+          "events"
+        ],
+        "additionalProperties": false,
+        "description": "A release public page"
+      },
+      "PublicReleasePageOutput": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PublicReleaseSummaryOutput"
+            },
+            "description": "Page of public releases"
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Opaque cursor for the next page (null if no more results forward). Pass back verbatim as `after`; do not parse."
+          },
+          "previousCursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Opaque cursor for the previous page (null if at the beginning). Optional — may be omitted on responses that do not support backward paging. Pass back verbatim as `before`; do not parse."
+          },
+          "totalCount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Total count of matching items (null if not computed). Optional — may be omitted entirely; clients must not depend on its presence."
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "additionalProperties": false,
+        "description": "A cursor-paginated page of public releases"
+      },
+      "PublicReleaseFeedItemOutput": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Stable release id. Store this identifier; the slug may change.",
+            "examples": [
+              "rel_6encc4akrze2ah9kntzd9t"
+            ]
+          },
+          "slug": {
+            "type": "string",
+            "description": "The release's public page slug (the `/r/{slug}` segment on the space site). Mutable — changing it breaks old links with no redirect; store the `id`.",
+            "examples": [
+              "blue-record"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "description": "Release name",
+            "examples": [
+              "Blue Record"
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/PublicReleaseStatus"
+          },
+          "shortDescription": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "One-line blurb. Newlines are not expected here; render as a single line of text."
+          },
+          "cover": {
+            "$ref": "#/components/schemas/PublicMediaOutput",
+            "description": "Cover image, when the release has one. Always a PUBLIC, permanently-hosted CDN image — this endpoint never emits a signed or expiring URL."
+          },
+          "catalogNumber": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The space's own catalog expression (\"MTL-001\", \"no. 4\"). NOT A KEY: free text, deliberately un-unique — runners reuse it, re-number, and leave gaps. Render it; never index on it.",
+            "examples": [
+              "MTL-001"
+            ]
+          },
+          "releaseDate": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The release's own date as a bare calendar date, `YYYY-MM-DD`, with NO time zone — the all-day convention, because a release date is a date everywhere rather than an instant somewhere. Null when the release is undated. Unrelated to `firstPublishedAt`, which is when this PAGE first became public.",
+            "examples": [
+              "2026-09-12"
+            ]
+          },
+          "location": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Freeform place string, purely presentational. Never geocoded, never a key.",
+            "examples": [
+              "Austin, TX"
+            ]
+          },
+          "firstPublishedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When this release FIRST became public (ISO 8601 UTC), stamped once and never re-stamped — taking a release down and putting it back must not reshuffle a reader's shelf. The index is ordered by this value, newest first. Null only for a release that reached a public phase without ever being stamped.",
+            "examples": [
+              "2026-09-01T17:00:00.000Z"
+            ]
+          },
+          "productCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "How many products in the composition are PUBLICLY purchasable — the same set the release page lists, counted. Never the raw composition size, which would disclose how much of a release a space has not published.",
+            "examples": [
+              2
+            ]
+          },
+          "space": {
+            "$ref": "#/components/schemas/PublicSpaceRefOutput"
+          }
+        },
+        "required": [
+          "id",
+          "slug",
+          "name",
+          "status",
+          "shortDescription",
+          "catalogNumber",
+          "releaseDate",
+          "location",
+          "firstPublishedAt",
+          "productCount",
+          "space"
+        ],
+        "additionalProperties": false,
+        "description": "A public release with the space it belongs to"
+      },
+      "PublicReleaseFeedPageOutput": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PublicReleaseFeedItemOutput"
+            },
+            "description": "Page of public releases across every publicly-discoverable space"
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Opaque cursor for the next page (null if no more results forward). Pass back verbatim as `after`; do not parse."
+          },
+          "previousCursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Opaque cursor for the previous page (null if at the beginning). Optional — may be omitted on responses that do not support backward paging. Pass back verbatim as `before`; do not parse."
+          },
+          "totalCount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Total count of matching items (null if not computed). Optional — may be omitted entirely; clients must not depend on its presence."
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "additionalProperties": false,
+        "description": "A cursor-paginated page of cross-space public releases"
       },
       "PublicProfileLinkOutput": {
         "type": "object",
@@ -3134,6 +4173,10 @@
     {
       "name": "Products",
       "description": "Store products with a public purchase page"
+    },
+    {
+      "name": "Releases",
+      "description": "Releases with a public page — the work a space put out, and the products, images, credits and dates that belong to it"
     },
     {
       "name": "Topics",
@@ -5848,6 +6891,208 @@
         }
       }
     },
+    "/products": {
+      "get": {
+        "operationId": "products.listAllProducts",
+        "summary": "List public products across all spaces",
+        "description": "List every store product with a public purchase page, across every publicly-discoverable space, newest-created first, cursor-paginated. Each item is the same object the space-scoped routes return plus the `space` it belongs to. The space gate matches public space discovery (`GET /spaces`) rather than direct space lookup, so a space excluded from the directory is absent here even though its own product routes still serve it — and a space turning its public site off drops every one of its products from this feed by predicate. No filters beyond pagination in this version.",
+        "tags": [
+          "Products"
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "description": "Maximum number of items per page (default: 20, max: 100)",
+              "examples": [
+                20
+              ]
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "description": "Opaque cursor for forward pagination — fetch items after this cursor. Treat as an opaque token: pass back a `nextCursor`/`previousCursor` verbatim; do not parse or construct it (its encoding carries no stability guarantee).",
+              "examples": [
+                "eyJpZCI6InBvc3RfNmVuY2M0YWtyemUyYWg5a250emQ5dCJ9"
+              ]
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "description": "Opaque cursor for backward pagination — fetch items before this cursor. Treat as an opaque token (see `after`).",
+              "examples": [
+                "eyJpZCI6InBvc3RfNmVuY2M0YWtyemUyYWg5a250emQ5dCJ9"
+              ]
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicProductFeedPageOutput"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "429",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": true
+                        },
+                        "code": {
+                          "const": "E_RATE_LIMITED"
+                        },
+                        "status": {
+                          "const": 429
+                        },
+                        "message": {
+                          "type": "string",
+                          "default": "Rate limit exceeded — retry after `retryAfterMs`."
+                        },
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "scope": {
+                              "type": "string",
+                              "description": "Which per-IP budget was exhausted"
+                            },
+                            "retryAfterMs": {
+                              "type": "number",
+                              "description": "Milliseconds to wait before retrying"
+                            }
+                          },
+                          "required": [
+                            "scope",
+                            "retryAfterMs"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message",
+                        "data"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": false
+                        },
+                        "code": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "number"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "503",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": true
+                        },
+                        "code": {
+                          "const": "E_SERVICE_UNAVAILABLE"
+                        },
+                        "status": {
+                          "const": 503
+                        },
+                        "message": {
+                          "type": "string",
+                          "default": "Service temporarily unavailable — the rate-limit store was unreachable (fail-closed)."
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": false
+                        },
+                        "code": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "number"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/spaces/{space}/products/{slug}": {
       "get": {
         "operationId": "products.getProduct",
@@ -5891,6 +7136,731 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PublicProductOutput"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": true
+                        },
+                        "code": {
+                          "const": "E_NOT_FOUND"
+                        },
+                        "status": {
+                          "const": 404
+                        },
+                        "message": {
+                          "type": "string",
+                          "default": "Not found. A missing space and a non-public (private) one return a byte-identical 404 by design — the two are deliberately indistinguishable (no existence leak)."
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": false
+                        },
+                        "code": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "number"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "429",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": true
+                        },
+                        "code": {
+                          "const": "E_RATE_LIMITED"
+                        },
+                        "status": {
+                          "const": 429
+                        },
+                        "message": {
+                          "type": "string",
+                          "default": "Rate limit exceeded — retry after `retryAfterMs`."
+                        },
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "scope": {
+                              "type": "string",
+                              "description": "Which per-IP budget was exhausted"
+                            },
+                            "retryAfterMs": {
+                              "type": "number",
+                              "description": "Milliseconds to wait before retrying"
+                            }
+                          },
+                          "required": [
+                            "scope",
+                            "retryAfterMs"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message",
+                        "data"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": false
+                        },
+                        "code": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "number"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "503",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": true
+                        },
+                        "code": {
+                          "const": "E_SERVICE_UNAVAILABLE"
+                        },
+                        "status": {
+                          "const": 503
+                        },
+                        "message": {
+                          "type": "string",
+                          "default": "Service temporarily unavailable — the rate-limit store was unreachable (fail-closed)."
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": false
+                        },
+                        "code": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "number"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/spaces/{space}/releases": {
+      "get": {
+        "operationId": "releases.listSpaceReleases",
+        "summary": "List a space public releases",
+        "description": "List the releases a space has published public pages for, newest-published first (`firstPublishedAt` descending), cursor-paginated. Returns 404 if the space has no public profile (byte-identical to every other not-found — no existence leak). Releases still in draft, preview or archived phases, releases scoped to members or a group, and releases with no slug never appear and are never counted; an empty list is a valid answer and reveals nothing.",
+        "tags": [
+          "Releases"
+        ],
+        "parameters": [
+          {
+            "name": "space",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "A space identifier: its subdomain (custom domain if set, else the normalized `space-{id}` form), its entity id (`space_…`), or its protocol DID (`did:dfos:` + 31 chars, as emitted in `did`). The subdomain is a mutable alias; the id and DID are canonical. Legacy internal identifiers are rejected.",
+              "examples": [
+                "metalabel",
+                "space_6encc4akrze2ah9kntzd9t",
+                "did:dfos:6encc4akrze2ah9kntzd9tc8zr24crc"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "description": "Maximum number of items per page (default: 20, max: 100)",
+              "examples": [
+                20
+              ]
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "description": "Opaque cursor for forward pagination — fetch items after this cursor. Treat as an opaque token: pass back a `nextCursor`/`previousCursor` verbatim; do not parse or construct it (its encoding carries no stability guarantee).",
+              "examples": [
+                "eyJpZCI6InBvc3RfNmVuY2M0YWtyemUyYWg5a250emQ5dCJ9"
+              ]
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "description": "Opaque cursor for backward pagination — fetch items before this cursor. Treat as an opaque token (see `after`).",
+              "examples": [
+                "eyJpZCI6InBvc3RfNmVuY2M0YWtyemUyYWg5a250emQ5dCJ9"
+              ]
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicReleasePageOutput"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": true
+                        },
+                        "code": {
+                          "const": "E_NOT_FOUND"
+                        },
+                        "status": {
+                          "const": 404
+                        },
+                        "message": {
+                          "type": "string",
+                          "default": "Not found. A missing space and a non-public (private) one return a byte-identical 404 by design — the two are deliberately indistinguishable (no existence leak)."
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": false
+                        },
+                        "code": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "number"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "429",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": true
+                        },
+                        "code": {
+                          "const": "E_RATE_LIMITED"
+                        },
+                        "status": {
+                          "const": 429
+                        },
+                        "message": {
+                          "type": "string",
+                          "default": "Rate limit exceeded — retry after `retryAfterMs`."
+                        },
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "scope": {
+                              "type": "string",
+                              "description": "Which per-IP budget was exhausted"
+                            },
+                            "retryAfterMs": {
+                              "type": "number",
+                              "description": "Milliseconds to wait before retrying"
+                            }
+                          },
+                          "required": [
+                            "scope",
+                            "retryAfterMs"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message",
+                        "data"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": false
+                        },
+                        "code": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "number"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "503",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": true
+                        },
+                        "code": {
+                          "const": "E_SERVICE_UNAVAILABLE"
+                        },
+                        "status": {
+                          "const": 503
+                        },
+                        "message": {
+                          "type": "string",
+                          "default": "Service temporarily unavailable — the rate-limit store was unreachable (fail-closed)."
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": false
+                        },
+                        "code": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "number"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/releases": {
+      "get": {
+        "operationId": "releases.listReleases",
+        "summary": "List public releases across all spaces",
+        "description": "List releases with a public page across every publicly-discoverable space, newest-published first (`firstPublishedAt` descending), cursor-paginated. Each item is the same summary a space's own shelf returns plus the `space` it belongs to. The space gate matches public space discovery (`GET /spaces`) rather than direct space lookup, so a space excluded from the directory is absent here even though its own release routes still serve it. Releases in draft, preview or archived phases, releases scoped to members or a group, and releases with no slug never appear; an empty page is a valid answer and reveals nothing. No filters beyond pagination in this version.",
+        "tags": [
+          "Releases"
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "description": "Maximum number of items per page (default: 20, max: 100)",
+              "examples": [
+                20
+              ]
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "description": "Opaque cursor for forward pagination — fetch items after this cursor. Treat as an opaque token: pass back a `nextCursor`/`previousCursor` verbatim; do not parse or construct it (its encoding carries no stability guarantee).",
+              "examples": [
+                "eyJpZCI6InBvc3RfNmVuY2M0YWtyemUyYWg5a250emQ5dCJ9"
+              ]
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "description": "Opaque cursor for backward pagination — fetch items before this cursor. Treat as an opaque token (see `after`).",
+              "examples": [
+                "eyJpZCI6InBvc3RfNmVuY2M0YWtyemUyYWg5a250emQ5dCJ9"
+              ]
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicReleaseFeedPageOutput"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "429",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": true
+                        },
+                        "code": {
+                          "const": "E_RATE_LIMITED"
+                        },
+                        "status": {
+                          "const": 429
+                        },
+                        "message": {
+                          "type": "string",
+                          "default": "Rate limit exceeded — retry after `retryAfterMs`."
+                        },
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "scope": {
+                              "type": "string",
+                              "description": "Which per-IP budget was exhausted"
+                            },
+                            "retryAfterMs": {
+                              "type": "number",
+                              "description": "Milliseconds to wait before retrying"
+                            }
+                          },
+                          "required": [
+                            "scope",
+                            "retryAfterMs"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message",
+                        "data"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": false
+                        },
+                        "code": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "number"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "503",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": true
+                        },
+                        "code": {
+                          "const": "E_SERVICE_UNAVAILABLE"
+                        },
+                        "status": {
+                          "const": 503
+                        },
+                        "message": {
+                          "type": "string",
+                          "default": "Service temporarily unavailable — the rate-limit store was unreachable (fail-closed)."
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": false
+                        },
+                        "code": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "number"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/spaces/{space}/releases/{slug}": {
+      "get": {
+        "operationId": "releases.getSpaceRelease",
+        "summary": "Get a public release",
+        "description": "Fetch a release's public page by its slug, with its media wall, credits, composed products, and public dates. Returns 404 if the space has no public profile, the slug matches no release, the release belongs to another space, it is in a draft, preview or archived phase, it is scoped to space or group members, or it has been deleted — all byte-identical (no existence leak).",
+        "tags": [
+          "Releases"
+        ],
+        "parameters": [
+          {
+            "name": "space",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "A space identifier: its subdomain (custom domain if set, else the normalized `space-{id}` form), its entity id (`space_…`), or its protocol DID (`did:dfos:` + 31 chars, as emitted in `did`). The subdomain is a mutable alias; the id and DID are canonical. Legacy internal identifiers are rejected.",
+              "examples": [
+                "metalabel",
+                "space_6encc4akrze2ah9kntzd9t",
+                "did:dfos:6encc4akrze2ah9kntzd9tc8zr24crc"
+              ]
+            }
+          },
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The release's public page slug (the `/r/{slug}` segment on the space site). Mutable — changing it breaks old links with no redirect; store the `id`.",
+              "examples": [
+                "blue-record"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicReleaseOutput"
                 }
               }
             }
