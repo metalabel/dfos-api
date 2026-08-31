@@ -204,6 +204,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/products": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List public products across all spaces
+         * @description List every store product with a public purchase page, across every publicly-discoverable space, newest-created first, cursor-paginated. Each item is the same object the space-scoped routes return plus the `space` it belongs to. The space gate matches public space discovery (`GET /spaces`) rather than direct space lookup, so a space excluded from the directory is absent here even though its own product routes still serve it — and a space turning its public site off drops every one of its products from this feed by predicate. No filters beyond pagination in this version.
+         */
+        get: operations["products.listAllProducts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/spaces/{space}/products/{slug}": {
         parameters: {
             query?: never;
@@ -216,6 +236,66 @@ export interface paths {
          * @description Fetch a store product's public purchase page by its slug. Returns 404 if the space has no public profile, the slug matches no product, the product belongs to another space, the seller has not published a public page for it, or the product is archived or inactive — all byte-identical (no existence leak).
          */
         get: operations["products.getProduct"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/spaces/{space}/releases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a space public releases
+         * @description List the releases a space has published public pages for, newest-published first (`firstPublishedAt` descending), cursor-paginated. Returns 404 if the space has no public profile (byte-identical to every other not-found — no existence leak). Releases still in draft, preview or archived phases, releases scoped to members or a group, and releases with no slug never appear and are never counted; an empty list is a valid answer and reveals nothing.
+         */
+        get: operations["releases.listSpaceReleases"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/releases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List public releases across all spaces
+         * @description List releases with a public page across every publicly-discoverable space, newest-published first (`firstPublishedAt` descending), cursor-paginated. Each item is the same summary a space's own shelf returns plus the `space` it belongs to. The space gate matches public space discovery (`GET /spaces`) rather than direct space lookup, so a space excluded from the directory is absent here even though its own release routes still serve it. Releases in draft, preview or archived phases, releases scoped to members or a group, and releases with no slug never appear; an empty page is a valid answer and reveals nothing. No filters beyond pagination in this version.
+         */
+        get: operations["releases.listReleases"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/spaces/{space}/releases/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a public release
+         * @description Fetch a release's public page by its slug, with its media wall, credits, composed products, and public dates. Returns 404 if the space has no public profile, the slug matches no release, the release belongs to another space, it is in a draft, preview or archived phase, it is scoped to space or group members, or it has been deleted — all byte-identical (no existence leak).
+         */
+        get: operations["releases.getSpaceRelease"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1006,8 +1086,8 @@ export interface components {
          * @enum {string}
          */
         PublicEventMode: "call" | "place" | "chat";
-        /** @description The space an event belongs to */
-        PublicEventSpaceOutput: {
+        /** @description The space an item belongs to */
+        PublicSpaceRefOutput: {
             /**
              * @description Space short ID — canonical and stable.
              * @example space_6encc4akrze2ah9kntzd9t
@@ -1100,7 +1180,7 @@ export interface components {
              * @example 2026-08-15T19:00:00
              */
             recurrenceId: string;
-            space: components["schemas"]["PublicEventSpaceOutput"];
+            space: components["schemas"]["PublicSpaceRefOutput"];
             /**
              * @description Event title
              * @example Listening session
@@ -1169,6 +1249,19 @@ export interface components {
             /** @description Total count of matching items (null if not computed). Optional — may be omitted entirely; clients must not depend on its presence. */
             totalCount?: number | null;
         };
+        /** @description The release a product belongs to */
+        PublicProductReleaseRefOutput: {
+            /**
+             * @description The release's public page slug — hand it to `GET /spaces/{space}/releases/{slug}` for the full page. Mutable, like every slug here.
+             * @example blue-record
+             */
+            slug: string;
+            /**
+             * @description Release name
+             * @example Blue Record
+             */
+            name: string;
+        };
         /** @description A store product with a public purchase page */
         PublicProductOutput: {
             /**
@@ -1233,11 +1326,386 @@ export interface components {
                  */
                 startDate: string | null;
             };
+            /** @description The release this product belongs to, when a publicly-visible one holds it — a one-line context chip, not a projection of the release. SINGULAR: a product composed into several releases carries the EARLIEST-published public one (ties broken by release id). Absent when the product is in no release, and equally absent when every release holding it is in a draft, preview or archived phase or is scoped to members or a group — the two are deliberately indistinguishable. Read `GET /spaces/{space}/releases/{slug}` for the release itself. */
+            release?: components["schemas"]["PublicProductReleaseRefOutput"];
+            /**
+             * Format: date-time
+             * @description When the product was created (ISO 8601 UTC). The cross-space index `GET /products` is ordered by this value, newest first. It is the row's own creation stamp — NOT "when it was published", which this surface does not record, and not a position in any catalog.
+             * @example 2026-09-01T17:00:00.000Z
+             */
+            createdAt: string;
         };
         /** @description A cursor-paginated page of public products */
         PublicProductPageOutput: {
             /** @description Page of public products */
             items: components["schemas"]["PublicProductOutput"][];
+            /** @description Opaque cursor for the next page (null if no more results forward). Pass back verbatim as `after`; do not parse. */
+            nextCursor: string | null;
+            /** @description Opaque cursor for the previous page (null if at the beginning). Optional — may be omitted on responses that do not support backward paging. Pass back verbatim as `before`; do not parse. */
+            previousCursor?: string | null;
+            /** @description Total count of matching items (null if not computed). Optional — may be omitted entirely; clients must not depend on its presence. */
+            totalCount?: number | null;
+        };
+        /** @description A public product with the space it belongs to */
+        PublicProductFeedItemOutput: {
+            /**
+             * @description Stable store-product id. Store this identifier; the slug may change.
+             * @example sprod_6encc4akrze2ah9kntzd9t
+             */
+            id: string;
+            /**
+             * @description The product's public purchase-page slug (the `/p/{slug}` segment on the space site). Mutable — changing it breaks old links with no redirect; store the `id`.
+             * @example softr-ticket
+             */
+            slug: string;
+            /**
+             * @description Product name
+             * @example SOFTR Ticket
+             */
+            name: string;
+            /** @description Seller-authored plain-text description. Newlines are significant; render with preserved whitespace. */
+            description: string | null;
+            /**
+             * @description What the product delivers. Open enum — treat an unrecognized value as an opaque string.
+             * @enum {string}
+             */
+            kind: "digital" | "physical";
+            /** @description Hero image, when the product has one. Always a PUBLIC, permanently-hosted CDN image — this endpoint never emits a signed or expiring URL. */
+            image?: components["schemas"]["PublicMediaOutput"];
+            /** @description Every purchasable price tier, one-time and recurring alike. Multiple tiers are normal (e.g. a one-time price alongside a monthly subscription). */
+            prices: components["schemas"]["PublicProductPriceOutput"][];
+            /** @description Whether buying this product makes the buyer a member of the space. A PRODUCT fact, identical for every caller — it says what the purchase does, not what any particular viewer would get from it (a caller who is already a member gains nothing new, and this field does not know or say so). */
+            purchaseGrantsMembership: boolean;
+            /** @description Remaining stock, or null when the product has unlimited stock. Advisory only — availability is re-checked at purchase. */
+            available: number | null;
+            /** @description True when limited stock is exhausted (`available` <= 0). */
+            isSoldOut: boolean;
+            /** @description Whether a purchase can be STARTED right now. False when the platform payment rail is paused or the product has no completable price tier — render an unavailable state rather than a dead buy button. Independent of `isSoldOut`, which has its own message. */
+            purchasable: boolean;
+            /**
+             * @description This product's position in the space's public product list, counting from 0 — LOWER SORTS FIRST. Dense and contiguous across the whole list (0, 1, 2, …) and meaningful only within one space; products with no public page are not counted, so this reveals nothing about a space's unpublished catalog. The index is ordered by this field. It is a POSITION, not a stable identifier — publishing, unpublishing, or reordering shifts it, so never store it as a key.
+             * @example 0
+             */
+            sortOrder: number;
+            /** @description The next upcoming PUBLIC event occurrence this product admits, when one exists — a ticket product’s backlink to what it sells entry to. SINGULAR BY DESIGN: a product may admit several events (a season pass), and this names the SOONEST upcoming occurrence across all of them — the one date a purchase page should send a buyer to — never a claim that only one event is admitted. Read the events namespace for the full relation. Absent when the product is not a ticket, when its ticket binding has been detached, when the event it admits is not publicly visible, and when no occurrence falls inside the window this API serves (the same ~1 year the events routes look ahead). */
+            ticketFor?: {
+                /**
+                 * @description The event series this product admits — the same `seriesId` the events namespace emits.
+                 * @example evt_6encc4akrze2ah9kntzd9t
+                 */
+                seriesId: string;
+                /**
+                 * @description RFC 5545 RECURRENCE-ID of the NEXT upcoming occurrence: its local wall-time (`YYYY-MM-DDTHH:MM:SS`), or its date (`YYYY-MM-DD`) for an all-day event. Byte-identical to the events namespace's value for the same occurrence.
+                 * @example 2026-08-15T19:00:00
+                 */
+                recurrenceId: string;
+                /**
+                 * @description That occurrence's resolved start instant (ISO 8601 UTC). Null for an all-day event.
+                 * @example 2026-08-16T00:00:00.000Z
+                 */
+                startsAt: string | null;
+                /**
+                 * @description All-day only: that occurrence's start date (`YYYY-MM-DD`). Null for a timed event.
+                 * @example 2026-08-15
+                 */
+                startDate: string | null;
+            };
+            /** @description The release this product belongs to, when a publicly-visible one holds it — a one-line context chip, not a projection of the release. SINGULAR: a product composed into several releases carries the EARLIEST-published public one (ties broken by release id). Absent when the product is in no release, and equally absent when every release holding it is in a draft, preview or archived phase or is scoped to members or a group — the two are deliberately indistinguishable. Read `GET /spaces/{space}/releases/{slug}` for the release itself. */
+            release?: components["schemas"]["PublicProductReleaseRefOutput"];
+            /**
+             * Format: date-time
+             * @description When the product was created (ISO 8601 UTC). The cross-space index `GET /products` is ordered by this value, newest first. It is the row's own creation stamp — NOT "when it was published", which this surface does not record, and not a position in any catalog.
+             * @example 2026-09-01T17:00:00.000Z
+             */
+            createdAt: string;
+            space: components["schemas"]["PublicSpaceRefOutput"];
+        };
+        /** @description A cursor-paginated page of cross-space public products */
+        PublicProductFeedPageOutput: {
+            /** @description Page of public products across every publicly-discoverable space */
+            items: components["schemas"]["PublicProductFeedItemOutput"][];
+            /** @description Opaque cursor for the next page (null if no more results forward). Pass back verbatim as `after`; do not parse. */
+            nextCursor: string | null;
+            /** @description Opaque cursor for the previous page (null if at the beginning). Optional — may be omitted on responses that do not support backward paging. Pass back verbatim as `before`; do not parse. */
+            previousCursor?: string | null;
+            /** @description Total count of matching items (null if not computed). Optional — may be omitted entirely; clients must not depend on its presence. */
+            totalCount?: number | null;
+        };
+        /**
+         * @description Where the release is in its public life. `presale` = announced, selling ahead of the date; `live` = out; `closed` = the run has ended and the page is archival. Open enum — treat an unrecognized value as an opaque string.
+         * @enum {string}
+         */
+        PublicReleaseStatus: "presale" | "live" | "closed";
+        /** @description A credit on a release */
+        PublicReleaseCreditOutput: {
+            /**
+             * @description Stable credit id.
+             * @example relcred_6encc4akrze2ah9kntzd9t
+             */
+            id: string;
+            /**
+             * @description The credited name, exactly as the release renders it.
+             * @example Lena Ortiz
+             */
+            displayName: string;
+            /**
+             * @description What they did. Free text authored by the runner, never an enum — "mastering", "cover photograph", "with thanks to".
+             * @example mastering
+             */
+            role: string | null;
+        };
+        /** @description An entry on a release media wall */
+        PublicReleaseMediaOutput: {
+            /**
+             * @description Stable wall-entry id (not the media id — that is `media.id`).
+             * @example relmed_6encc4akrze2ah9kntzd9t
+             */
+            id: string;
+            /** @description Runner-authored caption for this entry, when there is one. */
+            caption: string | null;
+            /** @description The asset. Always a PUBLIC, permanently-hosted CDN image — this endpoint never emits a signed or expiring URL, so a wall entry whose asset is private media is omitted from the wall entirely rather than served with an expiring link. */
+            media: {
+                /**
+                 * @description Media object id — the value an `attachment://<id>` inline body token references. Use it to associate a body token with its entry in `bodyMedia` (required when a body carries more than one inline media item). Media ids already appear verbatim in the body markdown, so this exposes nothing new.
+                 * @example media_6encc4akrze2ah9kntzd9t
+                 */
+                id: string;
+                /** @description Original uploaded filename of the media object */
+                filename: string;
+                /** @description Resolved URL for the media object. A permanent, unsigned imgix CDN URL for public images; a time-limited SIGNED URL for private media (audio/video/files). When signed, `urlExpiresAt` is present — never persist a signed URL, re-fetch the post for a fresh one. */
+                url: string;
+                /** @description MIME type of the media object */
+                contentType: string;
+                /** @description Size of the media object in bytes (absent until upload is finalized) */
+                contentLength?: number;
+                /** @description Pixel width (images/video) */
+                width?: number;
+                /** @description Pixel height (images/video) */
+                height?: number;
+                /** @description Blur-hash placeholder string for progressive image loading */
+                blurHash?: string;
+                /** @description Uploader-authored caption / alt text, when present */
+                alt?: string;
+                /** @description Playback length in milliseconds (audio/video only) */
+                durationMs?: number;
+                /** @description CDN URL of an extracted poster frame / cover art (audio/video only) */
+                posterUrl?: string;
+                /** @description Streamable MP4 rendition URL (audio/video only). A permanent CDN URL for public media; a time-limited SIGNED URL for private media (in which case `urlExpiresAt` is present). */
+                playbackUrl?: string;
+                /**
+                 * Format: date-time
+                 * @description When the SIGNED `url` / `playbackUrl` expire (ISO 8601 UTC). PRESENT iff those URLs are time-limited signed URLs (private media); ABSENT means they are permanent (public images). Never persist a signed URL — re-fetch the post to obtain fresh ones.
+                 */
+                urlExpiresAt?: string;
+                /** @description Amplitude overview for audio — up to 200 integers, each 0–100 */
+                waveformPeaks?: number[];
+            };
+        };
+        /** @description A public calendar event a release points at */
+        PublicReleaseEventOutput: {
+            /**
+             * @description The event series — the same `seriesId` the events namespace emits.
+             * @example evt_6encc4akrze2ah9kntzd9t
+             */
+            seriesId: string;
+            /**
+             * @description RFC 5545 RECURRENCE-ID of the occurrence: its local wall-time (`YYYY-MM-DDTHH:MM:SS`), or its date (`YYYY-MM-DD`) for an all-day event. Byte-identical to the events namespace's value for the same occurrence.
+             * @example 2026-09-12T19:00:00
+             */
+            recurrenceId: string;
+            /**
+             * @description Event title
+             * @example Listening party
+             */
+            title: string;
+            /** @description True for a date-based occurrence: `startDate` carries the date and `startsAt` is null. False for a timed one, where the reverse holds. */
+            isAllDay: boolean;
+            /**
+             * @description Timed only: the IANA zone the event was authored in — the zone `recurrenceId` is expressed in. Null for an all-day event.
+             * @example America/New_York
+             */
+            timeZone: string | null;
+            /**
+             * @description That occurrence's resolved start instant (ISO 8601 UTC). Null for an all-day event.
+             * @example 2026-09-13T00:00:00.000Z
+             */
+            startsAt: string | null;
+            /**
+             * @description All-day only: that occurrence's start date (`YYYY-MM-DD`). Null for a timed event.
+             * @example 2026-09-12
+             */
+            startDate: string | null;
+        };
+        /** @description A release in a space public release shelf */
+        PublicReleaseSummaryOutput: {
+            /**
+             * @description Stable release id. Store this identifier; the slug may change.
+             * @example rel_6encc4akrze2ah9kntzd9t
+             */
+            id: string;
+            /**
+             * @description The release's public page slug (the `/r/{slug}` segment on the space site). Mutable — changing it breaks old links with no redirect; store the `id`.
+             * @example blue-record
+             */
+            slug: string;
+            /**
+             * @description Release name
+             * @example Blue Record
+             */
+            name: string;
+            status: components["schemas"]["PublicReleaseStatus"];
+            /** @description One-line blurb. Newlines are not expected here; render as a single line of text. */
+            shortDescription: string | null;
+            /** @description Cover image, when the release has one. Always a PUBLIC, permanently-hosted CDN image — this endpoint never emits a signed or expiring URL. */
+            cover?: components["schemas"]["PublicMediaOutput"];
+            /**
+             * @description The space's own catalog expression ("MTL-001", "no. 4"). NOT A KEY: free text, deliberately un-unique — runners reuse it, re-number, and leave gaps. Render it; never index on it.
+             * @example MTL-001
+             */
+            catalogNumber: string | null;
+            /**
+             * @description The release's own date as a bare calendar date, `YYYY-MM-DD`, with NO time zone — the all-day convention, because a release date is a date everywhere rather than an instant somewhere. Null when the release is undated. Unrelated to `firstPublishedAt`, which is when this PAGE first became public.
+             * @example 2026-09-12
+             */
+            releaseDate: string | null;
+            /**
+             * @description Freeform place string, purely presentational. Never geocoded, never a key.
+             * @example Austin, TX
+             */
+            location: string | null;
+            /**
+             * @description When this release FIRST became public (ISO 8601 UTC), stamped once and never re-stamped — taking a release down and putting it back must not reshuffle a reader's shelf. The index is ordered by this value, newest first. Null only for a release that reached a public phase without ever being stamped.
+             * @example 2026-09-01T17:00:00.000Z
+             */
+            firstPublishedAt: string | null;
+            /**
+             * @description How many products in the composition are PUBLICLY purchasable — the same set the release page lists, counted. Never the raw composition size, which would disclose how much of a release a space has not published.
+             * @example 2
+             */
+            productCount: number;
+        };
+        /** @description A release public page */
+        PublicReleaseOutput: {
+            /**
+             * @description Stable release id. Store this identifier; the slug may change.
+             * @example rel_6encc4akrze2ah9kntzd9t
+             */
+            id: string;
+            /**
+             * @description The release's public page slug (the `/r/{slug}` segment on the space site). Mutable — changing it breaks old links with no redirect; store the `id`.
+             * @example blue-record
+             */
+            slug: string;
+            /**
+             * @description Release name
+             * @example Blue Record
+             */
+            name: string;
+            status: components["schemas"]["PublicReleaseStatus"];
+            /** @description One-line blurb. Newlines are not expected here; render as a single line of text. */
+            shortDescription: string | null;
+            /** @description Cover image, when the release has one. Always a PUBLIC, permanently-hosted CDN image — this endpoint never emits a signed or expiring URL. */
+            cover?: components["schemas"]["PublicMediaOutput"];
+            /**
+             * @description The space's own catalog expression ("MTL-001", "no. 4"). NOT A KEY: free text, deliberately un-unique — runners reuse it, re-number, and leave gaps. Render it; never index on it.
+             * @example MTL-001
+             */
+            catalogNumber: string | null;
+            /**
+             * @description The release's own date as a bare calendar date, `YYYY-MM-DD`, with NO time zone — the all-day convention, because a release date is a date everywhere rather than an instant somewhere. Null when the release is undated. Unrelated to `firstPublishedAt`, which is when this PAGE first became public.
+             * @example 2026-09-12
+             */
+            releaseDate: string | null;
+            /**
+             * @description Freeform place string, purely presentational. Never geocoded, never a key.
+             * @example Austin, TX
+             */
+            location: string | null;
+            /**
+             * @description When this release FIRST became public (ISO 8601 UTC), stamped once and never re-stamped — taking a release down and putting it back must not reshuffle a reader's shelf. The index is ordered by this value, newest first. Null only for a release that reached a public phase without ever being stamped.
+             * @example 2026-09-01T17:00:00.000Z
+             */
+            firstPublishedAt: string | null;
+            /**
+             * @description How many products in the composition are PUBLICLY purchasable — the same set the release page lists, counted. Never the raw composition size, which would disclose how much of a release a space has not published.
+             * @example 2
+             */
+            productCount: number;
+            /** @description Long-form release copy. Newlines are significant; render with preserved whitespace. */
+            longDescription: string | null;
+            /** @description The media wall, in the runner's wall order. Entries whose asset is private media are omitted (this surface emits no signed URLs), so an empty wall is a valid answer. */
+            media: components["schemas"]["PublicReleaseMediaOutput"][];
+            /** @description Credits, in credit order. Only accepted and text-only credits appear — a pending or declined invitation is absent, and is indistinguishable from a credit that was never offered. */
+            credits: components["schemas"]["PublicReleaseCreditOutput"][];
+            /** @description The composed products, in the release's curated order — the SAME objects `products.getProduct` returns, filtered by the store's own public-visibility rule. A product with no public purchase page is absent from this list while the release page renders normally, and is not counted in `productCount`. */
+            products: components["schemas"]["PublicProductOutput"][];
+            /** @description Public calendar events this release points at, soonest first — both the ones the release emitted as phase milestones and organic events attached to it. Each is filtered by the EVENTS visibility rules; an event an anonymous caller may not see, or one with no occurrence in the window this API serves, is simply absent. */
+            events: components["schemas"]["PublicReleaseEventOutput"][];
+        };
+        /** @description A cursor-paginated page of public releases */
+        PublicReleasePageOutput: {
+            /** @description Page of public releases */
+            items: components["schemas"]["PublicReleaseSummaryOutput"][];
+            /** @description Opaque cursor for the next page (null if no more results forward). Pass back verbatim as `after`; do not parse. */
+            nextCursor: string | null;
+            /** @description Opaque cursor for the previous page (null if at the beginning). Optional — may be omitted on responses that do not support backward paging. Pass back verbatim as `before`; do not parse. */
+            previousCursor?: string | null;
+            /** @description Total count of matching items (null if not computed). Optional — may be omitted entirely; clients must not depend on its presence. */
+            totalCount?: number | null;
+        };
+        /** @description A public release with the space it belongs to */
+        PublicReleaseFeedItemOutput: {
+            /**
+             * @description Stable release id. Store this identifier; the slug may change.
+             * @example rel_6encc4akrze2ah9kntzd9t
+             */
+            id: string;
+            /**
+             * @description The release's public page slug (the `/r/{slug}` segment on the space site). Mutable — changing it breaks old links with no redirect; store the `id`.
+             * @example blue-record
+             */
+            slug: string;
+            /**
+             * @description Release name
+             * @example Blue Record
+             */
+            name: string;
+            status: components["schemas"]["PublicReleaseStatus"];
+            /** @description One-line blurb. Newlines are not expected here; render as a single line of text. */
+            shortDescription: string | null;
+            /** @description Cover image, when the release has one. Always a PUBLIC, permanently-hosted CDN image — this endpoint never emits a signed or expiring URL. */
+            cover?: components["schemas"]["PublicMediaOutput"];
+            /**
+             * @description The space's own catalog expression ("MTL-001", "no. 4"). NOT A KEY: free text, deliberately un-unique — runners reuse it, re-number, and leave gaps. Render it; never index on it.
+             * @example MTL-001
+             */
+            catalogNumber: string | null;
+            /**
+             * @description The release's own date as a bare calendar date, `YYYY-MM-DD`, with NO time zone — the all-day convention, because a release date is a date everywhere rather than an instant somewhere. Null when the release is undated. Unrelated to `firstPublishedAt`, which is when this PAGE first became public.
+             * @example 2026-09-12
+             */
+            releaseDate: string | null;
+            /**
+             * @description Freeform place string, purely presentational. Never geocoded, never a key.
+             * @example Austin, TX
+             */
+            location: string | null;
+            /**
+             * @description When this release FIRST became public (ISO 8601 UTC), stamped once and never re-stamped — taking a release down and putting it back must not reshuffle a reader's shelf. The index is ordered by this value, newest first. Null only for a release that reached a public phase without ever being stamped.
+             * @example 2026-09-01T17:00:00.000Z
+             */
+            firstPublishedAt: string | null;
+            /**
+             * @description How many products in the composition are PUBLICLY purchasable — the same set the release page lists, counted. Never the raw composition size, which would disclose how much of a release a space has not published.
+             * @example 2
+             */
+            productCount: number;
+            space: components["schemas"]["PublicSpaceRefOutput"];
+        };
+        /** @description A cursor-paginated page of cross-space public releases */
+        PublicReleaseFeedPageOutput: {
+            /** @description Page of public releases across every publicly-discoverable space */
+            items: components["schemas"]["PublicReleaseFeedItemOutput"][];
             /** @description Opaque cursor for the next page (null if no more results forward). Pass back verbatim as `after`; do not parse. */
             nextCursor: string | null;
             /** @description Opaque cursor for the previous page (null if at the beginning). Optional — may be omitted on responses that do not support backward paging. Pass back verbatim as `before`; do not parse. */
@@ -2618,6 +3086,87 @@ export interface operations {
             };
         };
     };
+    "products.listAllProducts": {
+        parameters: {
+            query?: {
+                limit?: number;
+                after?: string;
+                before?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicProductFeedPageOutput"];
+                };
+            };
+            /** @description 429 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_RATE_LIMITED";
+                        /** @constant */
+                        status: 429;
+                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
+                        message: string;
+                        data: {
+                            /** @description Which per-IP budget was exhausted */
+                            scope: string;
+                            /** @description Milliseconds to wait before retrying */
+                            retryAfterMs: number;
+                        };
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 503 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_SERVICE_UNAVAILABLE";
+                        /** @constant */
+                        status: 503;
+                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+        };
+    };
     "products.getProduct": {
         parameters: {
             query?: never;
@@ -2637,6 +3186,302 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PublicProductOutput"];
+                };
+            };
+            /** @description 404 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_NOT_FOUND";
+                        /** @constant */
+                        status: 404;
+                        /** @default Not found. A missing space and a non-public (private) one return a byte-identical 404 by design — the two are deliberately indistinguishable (no existence leak). */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 429 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_RATE_LIMITED";
+                        /** @constant */
+                        status: 429;
+                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
+                        message: string;
+                        data: {
+                            /** @description Which per-IP budget was exhausted */
+                            scope: string;
+                            /** @description Milliseconds to wait before retrying */
+                            retryAfterMs: number;
+                        };
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 503 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_SERVICE_UNAVAILABLE";
+                        /** @constant */
+                        status: 503;
+                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+        };
+    };
+    "releases.listSpaceReleases": {
+        parameters: {
+            query?: {
+                limit?: number;
+                after?: string;
+                before?: string;
+            };
+            header?: never;
+            path: {
+                space: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicReleasePageOutput"];
+                };
+            };
+            /** @description 404 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_NOT_FOUND";
+                        /** @constant */
+                        status: 404;
+                        /** @default Not found. A missing space and a non-public (private) one return a byte-identical 404 by design — the two are deliberately indistinguishable (no existence leak). */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 429 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_RATE_LIMITED";
+                        /** @constant */
+                        status: 429;
+                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
+                        message: string;
+                        data: {
+                            /** @description Which per-IP budget was exhausted */
+                            scope: string;
+                            /** @description Milliseconds to wait before retrying */
+                            retryAfterMs: number;
+                        };
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 503 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_SERVICE_UNAVAILABLE";
+                        /** @constant */
+                        status: 503;
+                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+        };
+    };
+    "releases.listReleases": {
+        parameters: {
+            query?: {
+                limit?: number;
+                after?: string;
+                before?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicReleaseFeedPageOutput"];
+                };
+            };
+            /** @description 429 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_RATE_LIMITED";
+                        /** @constant */
+                        status: 429;
+                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
+                        message: string;
+                        data: {
+                            /** @description Which per-IP budget was exhausted */
+                            scope: string;
+                            /** @description Milliseconds to wait before retrying */
+                            retryAfterMs: number;
+                        };
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 503 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_SERVICE_UNAVAILABLE";
+                        /** @constant */
+                        status: 503;
+                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+        };
+    };
+    "releases.getSpaceRelease": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                space: string;
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicReleaseOutput"];
                 };
             };
             /** @description 404 */
