@@ -444,6 +444,80 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/key-proof/present": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Present a key-add envelope
+         * @description Present a signed key-add envelope against an open ceremony. **Takes no authentication** — the code and the signature are the whole capability, and the client presenting them has no session by construction.
+         *
+         *     **This does not add the key.** It verifies the envelope, stores it, and moves the ceremony to `presented`. The identity's owner then sees the key's fingerprint in their DFOS settings and either adopts it — which is what appends the operation — or rejects it. Poll `GET /v1/key-proof/status?code=…` to find out which.
+         *
+         *     **You do not construct this URL.** Resolve the 8-character code the user carries out of the DFOS app at `GET /.well-known/dfos-key-proof?code=<code>` on this host. That lookup answers with everything needed to sign, and everything a tool MUST show its human before signing:
+         *
+         *     ```json
+         *     {
+         *       "present": "https://api.dfos.com/v1/key-proof/present",
+         *       "nonce": "…",
+         *       "audience": "api.dfos.com",
+         *       "purpose": "did:dfos:key-add",
+         *       "adopts": { "did": "did:dfos:…", "handle": "…", "displayName": "…" },
+         *       "roleSet": "auth,assert",
+         *       "prevCID": "…",
+         *       "expiresAt": "…",
+         *       "relay": "https://relay.dfos.com"
+         *     }
+         *     ```
+         *
+         *     An unknown code and a lapsed one both answer `404 { "error": "unknown or expired code" }`, deliberately identically. The well-known sits outside `/v1` (it is a discovery document, not a versioned resource), which is why it does not appear as an operation in this specification.
+         *
+         *     The envelope is a compact JWS with `typ` `did:dfos:key-add`, signed by the key being added. Its payload is byte-compared against the canonical serialization of exactly `{ nonce, audience, did, roleSet, prevCID, publicKeyMultibase, timestamp }` in that order, so a payload with the right values in a different order is a different signed object and is refused. `audience` is this API's own host; `did`, `roleSet` and `prevCID` are the POSITION the key is being added at, and all three come from the resolution above — an envelope is bound to one introduction on one chain at one head, and is worthless anywhere else. `timestamp` is a whole-second UTC instant within five minutes of now. The optional `description` in the request body is **not** one of those members and is not signed.
+         *
+         *     Only a bad SIGNATURE consumes the ceremony: that leaves it `failed` and a new code must be minted. Every other refusal — a malformed body, an over-long `description`, an over-cap `envelope`, a wrong audience, a stale timestamp, a `did`/`roleSet`/`prevCID` that does not match — is decided before anything is consumed, so the code stays live and the command can simply be re-run. If the chain head moved while you were signing, re-resolve the code and present again with a fresh `prevCID`: **presenting the same key twice is admitted**, and replaces the stored envelope. Presenting a DIFFERENT key against a ceremony that already has one is refused. A public key that another identity chain has already PROVED is refused at adoption — one key names one identity, or "who signed this" stops having an answer.
+         */
+        post: operations["keyProof.present"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/key-proof/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Poll a key-add ceremony
+         * @description Where the ceremony behind a code has got to. **Takes no authentication** — the code is the capability, and this is scoped to nothing else.
+         *
+         *     This is the leg a CLI waits on after presenting: the identity's owner has to adopt or reject in their browser, and until they do the answer is `presented`.
+         *
+         *     Watch `stale`. While `presented`, it turns true if another writer moves the identity's chain head — the stored envelope is bound to the head it was signed against, so it can no longer be adopted as-is. Re-resolve the code, sign a fresh envelope for the **same key** with the new `prevCID`, and present it again; the owner's approval carries across, and their browser retries the adoption on its own.
+         *
+         *     On `adopted`, `onAdopted` carries the DID, the chain-local key id, and the CID of the operation that added it — enough to fetch the chain from the relay the resolution named and file the key locally without asking anything else. **It is served only while the ceremony's ten minutes are still running.** Past `expiresAt` the answer narrows to the bare `status`: a spent code must not stay a permanent handle on somebody's identity, and a CLI polling its own ceremony has the receipt seconds after presenting — long before that matters.
+         *
+         *     `rejected` is not an error: the person declined a key they did not recognize, nothing was added, and the honest thing to tell your user is exactly that.
+         *
+         *     A code this deployment never issued is refused. A code it DID issue answers its real state, including after that state is terminal — which a caller needs, since the whole point of polling is to learn how the ceremony ended. So this endpoint does distinguish a real spent code from a fabricated one. That is one bit, it is deliberate, and it is what the rate limit is in front of; the 8-character code space is not a secret this endpoint is defending, the nonce and the signature are.
+         */
+        get: operations["keyProof.status"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/protocol": {
         parameters: {
             query?: never;
@@ -4103,6 +4177,290 @@ export interface operations {
                         /** @constant */
                         status: 413;
                         /** @default The request body exceeds the maximum this endpoint will authenticate. A proof binds the body it was signed over, so an unhashable body cannot be authenticated at any size — the cap is refused before the signature is checked, not after. */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 429 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_RATE_LIMITED";
+                        /** @constant */
+                        status: 429;
+                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
+                        message: string;
+                        data: {
+                            /** @description Which per-IP budget was exhausted */
+                            scope: string;
+                            /** @description Milliseconds to wait before retrying */
+                            retryAfterMs: number;
+                        };
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 503 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_SERVICE_UNAVAILABLE";
+                        /** @constant */
+                        status: 503;
+                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+        };
+    };
+    "keyProof.present": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /**
+                     * @description The 8-character ceremony code the user carried out of the DFOS app — the same code the well-known lookup was resolved against
+                     * @example K7M2QXPA
+                     */
+                    code: string;
+                    /**
+                     * @description The compact JWS proving possession, `typ` `did:dfos:key-add`. The header carries `alg` (`EdDSA`) and `typ` and nothing else — a `kid` is refused, because the verifying key comes from the payload. The payload carries exactly `nonce`, `audience`, `did`, `roleSet`, `prevCID`, `publicKeyMultibase` and `timestamp`, in that order: it is byte-compared against its canonical serialization, so the member order is part of the contract. At most 4096 bytes
+                     * @example eyJhbGciOiJFZERTQSIsInR5cCI6ImRpZDpkZm9zOmtleS1hZGQifQ...
+                     */
+                    envelope: string;
+                    /**
+                     * @description Optional label for the key, shown to the user when they decide whether to adopt it — typically the machine it lives on. **Not part of the signed envelope**: it is unsigned platform metadata, it is not one of the payload members, and nothing about it affects whether the key is admitted. Trimmed; at most 200 characters, the same bound the settings rename enforces. Omitted, empty, or whitespace-only gets the default label `CLI signing key`. The user can rename it afterwards
+                     * @example work laptop
+                     */
+                    description?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /**
+                         * @description The envelope verified and is stored. **Nothing is on the identity chain yet** — the owner of the identity has to adopt it in their DFOS settings, and may instead reject it. Poll `/key-proof/status` to find out which
+                         * @constant
+                         */
+                        status: "presented";
+                        /** @description The identity a key-add ceremony is for */
+                        adopts: {
+                            /**
+                             * @description The protocol DID of the identity chain this key would be added to
+                             * @example did:dfos:6encc4akrze2ah9kntzd9tc8zr24crc
+                             */
+                            did: string;
+                            /**
+                             * @description The identity’s username, or null if it has none
+                             * @example bvalosek
+                             */
+                            handle: string | null;
+                            /**
+                             * @description The identity’s display name, or null
+                             * @example Brandon
+                             */
+                            displayName: string | null;
+                        };
+                        /**
+                         * Format: date-time
+                         * @description When the ceremony lapses. If nobody adopts or rejects by then it simply expires and nothing was added
+                         * @example 2026-08-28T17:10:00Z
+                         */
+                        expiresAt: string;
+                    };
+                };
+            };
+            /** @description 400 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_INVALID_REQUEST";
+                        /** @constant */
+                        status: 400;
+                        /** @default The request was refused. Unknown, expired, spent and wrong-nonce ceremonies all answer "this ceremony is not open" — that is a single statement, so there is nothing to learn by varying it. Only a bad SIGNATURE consumes the ceremony; every other refusal leaves the code live, so re-resolve and try again. */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 429 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_RATE_LIMITED";
+                        /** @constant */
+                        status: 429;
+                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
+                        message: string;
+                        data: {
+                            /** @description Which per-IP budget was exhausted */
+                            scope: string;
+                            /** @description Milliseconds to wait before retrying */
+                            retryAfterMs: number;
+                        };
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 503 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_SERVICE_UNAVAILABLE";
+                        /** @constant */
+                        status: 503;
+                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+        };
+    };
+    "keyProof.status": {
+        parameters: {
+            query: {
+                code: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /**
+                         * @description `pending` = nobody has presented an envelope. `presented` = yours verified and the identity’s owner is deciding. `adopted` = they adopted it and the key is on the chain (see `onAdopted`). `rejected` = they declined; **nothing was added**, and that is not an error. `failed` = an envelope was refused at the signature; the ceremony is burned. `expired` = the ten minutes ran out
+                         * @enum {string}
+                         */
+                        status: "pending" | "presented" | "adopted" | "rejected" | "failed" | "expired";
+                        /** @description Present only while `presented`. True when the chain head has moved since your envelope was signed, so it can no longer be adopted as-is. **Re-resolve the code and present a fresh envelope for the same key** — that is admitted, and the owner’s approval carries across it */
+                        stale?: boolean;
+                        /** @description Present only on `adopted` */
+                        onAdopted?: {
+                            /**
+                             * @description The identity chain the key was added to
+                             * @example did:dfos:6encc4akrze2ah9kntzd9tc8zr24crc
+                             */
+                            did: string;
+                            /**
+                             * @description The chain-local id the key was given. The DID URL a verifier sees is `<did>#<keyId>`
+                             * @example key_4h2ndv79fckae3rz6t8v2d
+                             */
+                            keyId: string;
+                            /**
+                             * @description CID of the operation that added the key, with your envelope embedded in it — the receipt anyone can go read
+                             * @example bafyreib2rxk3rhqhbvpaowvtdcnqvbtwbctvvbrqjhkgvhvcnpi7zdkeqm
+                             */
+                            chainOpCID: string;
+                        };
+                    };
+                };
+            };
+            /** @description 400 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_INVALID_REQUEST";
+                        /** @constant */
+                        status: 400;
+                        /** @default The request was refused. Unknown, expired, spent and wrong-nonce ceremonies all answer "this ceremony is not open" — that is a single statement, so there is nothing to learn by varying it. Only a bad SIGNATURE consumes the ceremony; every other refusal leaves the code live, so re-resolve and try again. */
                         message: string;
                         data?: unknown;
                     } | {

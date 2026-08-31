@@ -2,7 +2,7 @@
   "info": {
     "title": "The DFOS API",
     "version": "1.0.0-beta",
-    "description": "The external HTTP API for Dark Forest OS — space profiles, public feeds, and\npublic posts.\n\nEvery endpoint is a `GET`, and every endpoint is anonymous **except the\ncredential-gated ones**: `GET /profile` serves the profile of the user who\ngranted access, `GET /memberships` and `GET /group-memberships` serve the\nspaces and groups they belong to (with `GET /membership/{space}` and\n`GET /group-membership/{group}` as one-request checks), and\n`GET /credential` describes the presented credential itself. Anonymous\nresponses are viewer-independent — the anonymous\naudience is the same for everyone, so there is exactly one correct projection of\nany resource. The credential-gated routes are the deliberate carve-out: their\nbodies are a specific person's data, selected by the credential presented, and\nthey are `no-store` like every other data response.\n\n**Authenticating to the credential-gated routes.** Access is proof-of-possession, not a\nbearer token. The caller presents a durable **credential** the user issued (via\nSign In With DFOS) alongside a fresh **request proof** — a short-lived JWS,\nsigned by the key the credential was issued to, binding this exact method, host,\npath, and body:\n\n```\nAuthorization: DFOS <request-proof JWS>\nX-Credential:  <credential JWS>\n```\n\nNeither works alone: a captured credential is inert without the audience key, and\na captured proof authorizes nothing but the single request it already described,\nfor the seconds its freshness window allows. A proof-layer failure is `401`\nwith a `WWW-Authenticate: DFOS` challenge (sign a correct proof and retry); a\ncredential-layer failure is `403` (the grant does not cover this — retrying\nwill not help). The full byte contract is\n[DFOS API-AUTH](https://protocol.dfos.com/api-auth).\n\nData responses are `no-store` (only the generated spec is CDN-cached), so\nreferenced media in a public post comes back as time-limited SIGNED URLs inline —\nnever persist those, re-fetch the post for fresh ones (see `urlExpiresAt`). A\nnon-public or missing space returns a 404 that is deliberately indistinguishable\nfrom any other — the API never reveals whether a space it won't serve actually\nexists.\n\n**Forward-compatibility — clients MUST:**\n- **Tolerate unknown fields.** New response fields are added without a version\n  bump; ignore fields you don't recognize.\n- **Tolerate unknown enum values.** Enums (e.g. `joinMode`, `siteMode`) can grow\n  new members; treat an unrecognized value as an opaque string, not an error.\n- **Treat cursors as opaque tokens.** Pass `nextCursor`/`previousCursor` back\n  verbatim; never parse or construct a cursor.\n- **Treat subdomains as mutable aliases.** A space's subdomain can change or be\n  reassigned; the space `id` and protocol `did` are the canonical, stable\n  identifiers to store.",
+    "description": "The external HTTP API for Dark Forest OS — space profiles, public feeds, and\npublic posts.\n\nEvery endpoint that reads data is a `GET`, and every endpoint is anonymous **except the\ncredential-gated ones**: `GET /profile` serves the profile of the user who\ngranted access, `GET /memberships` and `GET /group-memberships` serve the\nspaces and groups they belong to (with `GET /membership/{space}` and\n`GET /group-membership/{group}` as one-request checks), and\n`GET /credential` describes the presented credential itself. Anonymous\nresponses are viewer-independent — the anonymous\naudience is the same for everyone, so there is exactly one correct projection of\nany resource. The credential-gated routes are the deliberate carve-out: their\nbodies are a specific person's data, selected by the credential presented, and\nthey are `no-store` like every other data response.\n\n**Authenticating to the credential-gated routes.** Access is proof-of-possession, not a\nbearer token. The caller presents a durable **credential** the user issued (via\nSign In With DFOS) alongside a fresh **request proof** — a short-lived JWS,\nsigned by the key the credential was issued to, binding this exact method, host,\npath, and body:\n\n```\nAuthorization: DFOS <request-proof JWS>\nX-Credential:  <credential JWS>\n```\n\nNeither works alone: a captured credential is inert without the audience key, and\na captured proof authorizes nothing but the single request it already described,\nfor the seconds its freshness window allows. A proof-layer failure is `401`\nwith a `WWW-Authenticate: DFOS` challenge (sign a correct proof and retry); a\ncredential-layer failure is `403` (the grant does not cover this — retrying\nwill not help). The full byte contract is\n[DFOS API-AUTH](https://protocol.dfos.com/api-auth).\n\n**Adding a signing key (KEY-PROOF).** The one write on this API, and the one\n`POST`: `POST /key-proof/present` carries a signed envelope proving possession\nof a public key, against a ceremony the key's owner minted in the DFOS app.\n`GET /key-proof/status` is the poll that follows it. Both are anonymous — the\ntyp-scoped JWS envelope is self-authenticating, and the client presenting it is\na CLI that has no session yet by construction.\n\n**Presenting does not add the key.** It verifies the envelope and stores it; the\nidentity's owner then sees the key's fingerprint in their DFOS settings and\neither adopts it — which is what appends the operation — or rejects it. Poll\n`status` to find out which. A code carried to the wrong terminal therefore adds\nnothing to anybody's chain.\n\nThe discovery step is a well-known **outside the `/v1` prefix**, so it is not an\noperation in this document:\n\n```\nGET https://{this host}/.well-known/dfos-key-proof?code={the 8-character code}\n→ 200 {\n    \"present\": \"…\", \"nonce\": \"…\", \"audience\": \"…\", \"purpose\": \"did:dfos:key-add\",\n    \"adopts\": { \"did\": \"…\", \"handle\": \"…\", \"displayName\": \"…\" },\n    \"roleSet\": \"auth,assert\", \"prevCID\": \"…\", \"expiresAt\": \"…\", \"relay\": \"…\"\n  }\n→ 404 { \"error\": \"unknown or expired code\" }\n```\n\n`present` is the endpoint to POST the envelope to — follow it verbatim, do not\nassemble it. `nonce`, `audience`, `did` (from `adopts`), `roleSet` and\n`prevCID` are five of the envelope's seven signed members, and they are supplied\nrather than chosen: the envelope binds the key to ONE introduction, on one chain,\nat one chain head, so it is worthless anywhere else and there is no such thing as\na proof held in reserve. `adopts` also carries the identity's handle and display\nname because **a tool MUST show its human the identity and role set before it\nsigns** — a bare DID is not something a person recognizes. `relay` is the origin\nof the relay serving this deployment's identity index, so a client with no peer\nconfigured can still run its one-key-one-DID pre-flight on first use; treat it as\noptional and advisory (the platform re-checks authoritatively at adoption).\nUnknown and expired codes answer identically, so a code-guesser never learns it\nfound a real ceremony that had merely lapsed. Everything else about the flow is\non the operations themselves.\n\nData responses are `no-store` (only the generated spec is CDN-cached), so\nreferenced media in a public post comes back as time-limited SIGNED URLs inline —\nnever persist those, re-fetch the post for fresh ones (see `urlExpiresAt`). A\nnon-public or missing space returns a 404 that is deliberately indistinguishable\nfrom any other — the API never reveals whether a space it won't serve actually\nexists.\n\n**Forward-compatibility — clients MUST:**\n- **Tolerate unknown fields.** New response fields are added without a version\n  bump; ignore fields you don't recognize.\n- **Tolerate unknown enum values.** Enums (e.g. `joinMode`, `siteMode`) can grow\n  new members; treat an unrecognized value as an opaque string, not an error.\n- **Treat cursors as opaque tokens.** Pass `nextCursor`/`previousCursor` back\n  verbatim; never parse or construct a cursor.\n- **Treat subdomains as mutable aliases.** A space's subdomain can change or be\n  reassigned; the space `id` and protocol `did` are the canonical, stable\n  identifiers to store.",
     "contact": {
       "name": "DFOS",
       "url": "https://docs.dfos.com/api"
@@ -3158,6 +3158,10 @@
     {
       "name": "Credential",
       "description": "Introspection of the presented credential — credential-gated, but needs no particular scope"
+    },
+    {
+      "name": "Key proof",
+      "description": "The CLI-facing half of the key-add ceremony — present a signed envelope proving possession of a signing key, then poll while the identity’s owner adopts or rejects it. Anonymous: the envelope is the credential. Presenting commits nothing to the chain. Discovery is at `/.well-known/dfos-key-proof?code=…` on this host, outside the `/v1` prefix"
     },
     {
       "name": "Protocol",
@@ -9796,6 +9800,651 @@
             "dfosCredential": []
           }
         ]
+      }
+    },
+    "/key-proof/present": {
+      "post": {
+        "operationId": "keyProof.present",
+        "summary": "Present a key-add envelope",
+        "description": "Present a signed key-add envelope against an open ceremony. **Takes no authentication** — the code and the signature are the whole capability, and the client presenting them has no session by construction.\n\n**This does not add the key.** It verifies the envelope, stores it, and moves the ceremony to `presented`. The identity's owner then sees the key's fingerprint in their DFOS settings and either adopts it — which is what appends the operation — or rejects it. Poll `GET /v1/key-proof/status?code=…` to find out which.\n\n**You do not construct this URL.** Resolve the 8-character code the user carries out of the DFOS app at `GET /.well-known/dfos-key-proof?code=<code>` on this host. That lookup answers with everything needed to sign, and everything a tool MUST show its human before signing:\n\n```json\n{\n  \"present\": \"https://api.dfos.com/v1/key-proof/present\",\n  \"nonce\": \"…\",\n  \"audience\": \"api.dfos.com\",\n  \"purpose\": \"did:dfos:key-add\",\n  \"adopts\": { \"did\": \"did:dfos:…\", \"handle\": \"…\", \"displayName\": \"…\" },\n  \"roleSet\": \"auth,assert\",\n  \"prevCID\": \"…\",\n  \"expiresAt\": \"…\",\n  \"relay\": \"https://relay.dfos.com\"\n}\n```\n\nAn unknown code and a lapsed one both answer `404 { \"error\": \"unknown or expired code\" }`, deliberately identically. The well-known sits outside `/v1` (it is a discovery document, not a versioned resource), which is why it does not appear as an operation in this specification.\n\nThe envelope is a compact JWS with `typ` `did:dfos:key-add`, signed by the key being added. Its payload is byte-compared against the canonical serialization of exactly `{ nonce, audience, did, roleSet, prevCID, publicKeyMultibase, timestamp }` in that order, so a payload with the right values in a different order is a different signed object and is refused. `audience` is this API's own host; `did`, `roleSet` and `prevCID` are the POSITION the key is being added at, and all three come from the resolution above — an envelope is bound to one introduction on one chain at one head, and is worthless anywhere else. `timestamp` is a whole-second UTC instant within five minutes of now. The optional `description` in the request body is **not** one of those members and is not signed.\n\nOnly a bad SIGNATURE consumes the ceremony: that leaves it `failed` and a new code must be minted. Every other refusal — a malformed body, an over-long `description`, an over-cap `envelope`, a wrong audience, a stale timestamp, a `did`/`roleSet`/`prevCID` that does not match — is decided before anything is consumed, so the code stays live and the command can simply be re-run. If the chain head moved while you were signing, re-resolve the code and present again with a fresh `prevCID`: **presenting the same key twice is admitted**, and replaces the stored envelope. Presenting a DIFFERENT key against a ceremony that already has one is refused. A public key that another identity chain has already PROVED is refused at adoption — one key names one identity, or \"who signed this\" stops having an answer.",
+        "tags": [
+          "Key proof"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "description": "The 8-character ceremony code the user carried out of the DFOS app — the same code the well-known lookup was resolved against",
+                    "examples": [
+                      "K7M2QXPA"
+                    ]
+                  },
+                  "envelope": {
+                    "type": "string",
+                    "maxLength": 4096,
+                    "description": "The compact JWS proving possession, `typ` `did:dfos:key-add`. The header carries `alg` (`EdDSA`) and `typ` and nothing else — a `kid` is refused, because the verifying key comes from the payload. The payload carries exactly `nonce`, `audience`, `did`, `roleSet`, `prevCID`, `publicKeyMultibase` and `timestamp`, in that order: it is byte-compared against its canonical serialization, so the member order is part of the contract. At most 4096 bytes",
+                    "examples": [
+                      "eyJhbGciOiJFZERTQSIsInR5cCI6ImRpZDpkZm9zOmtleS1hZGQifQ..."
+                    ]
+                  },
+                  "description": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "description": "Optional label for the key, shown to the user when they decide whether to adopt it — typically the machine it lives on. **Not part of the signed envelope**: it is unsigned platform metadata, it is not one of the payload members, and nothing about it affects whether the key is admitted. Trimmed; at most 200 characters, the same bound the settings rename enforces. Omitted, empty, or whitespace-only gets the default label `CLI signing key`. The user can rename it afterwards",
+                    "examples": [
+                      "work laptop"
+                    ]
+                  }
+                },
+                "required": [
+                  "code",
+                  "envelope"
+                ],
+                "additionalProperties": false,
+                "description": "Present a key-add envelope for an open ceremony",
+                "examples": [
+                  {
+                    "code": "K7M2QXPA",
+                    "envelope": "eyJhbGciOiJFZERTQSIsInR5cCI6ImRpZDpkZm9zOmtleS1hZGQifQ...",
+                    "description": "work laptop"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "const": "presented",
+                      "description": "The envelope verified and is stored. **Nothing is on the identity chain yet** — the owner of the identity has to adopt it in their DFOS settings, and may instead reject it. Poll `/key-proof/status` to find out which"
+                    },
+                    "adopts": {
+                      "type": "object",
+                      "properties": {
+                        "did": {
+                          "type": "string",
+                          "pattern": "^did:dfos:[2346789acdefhknrtvz]{31}$",
+                          "description": "The protocol DID of the identity chain this key would be added to",
+                          "examples": [
+                            "did:dfos:6encc4akrze2ah9kntzd9tc8zr24crc"
+                          ]
+                        },
+                        "handle": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "The identity’s username, or null if it has none",
+                          "examples": [
+                            "bvalosek"
+                          ]
+                        },
+                        "displayName": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "The identity’s display name, or null",
+                          "examples": [
+                            "Brandon"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "did",
+                        "handle",
+                        "displayName"
+                      ],
+                      "additionalProperties": false,
+                      "description": "The identity a key-add ceremony is for"
+                    },
+                    "expiresAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "description": "When the ceremony lapses. If nobody adopts or rejects by then it simply expires and nothing was added",
+                      "examples": [
+                        "2026-08-28T17:10:00Z"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "adopts",
+                    "expiresAt"
+                  ],
+                  "additionalProperties": false,
+                  "description": "The envelope verified. The identity’s owner now decides",
+                  "examples": [
+                    {
+                      "status": "presented",
+                      "adopts": {
+                        "did": "did:dfos:r7z9c4kfhne2t38va6d9kn2ch7f4b6a",
+                        "handle": "bvalosek",
+                        "displayName": "Brandon"
+                      },
+                      "expiresAt": "2026-08-28T17:10:00Z"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": true
+                        },
+                        "code": {
+                          "const": "E_INVALID_REQUEST"
+                        },
+                        "status": {
+                          "const": 400
+                        },
+                        "message": {
+                          "type": "string",
+                          "default": "The request was refused. Unknown, expired, spent and wrong-nonce ceremonies all answer \"this ceremony is not open\" — that is a single statement, so there is nothing to learn by varying it. Only a bad SIGNATURE consumes the ceremony; every other refusal leaves the code live, so re-resolve and try again."
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": false
+                        },
+                        "code": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "number"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "429",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": true
+                        },
+                        "code": {
+                          "const": "E_RATE_LIMITED"
+                        },
+                        "status": {
+                          "const": 429
+                        },
+                        "message": {
+                          "type": "string",
+                          "default": "Rate limit exceeded — retry after `retryAfterMs`."
+                        },
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "scope": {
+                              "type": "string",
+                              "description": "Which per-IP budget was exhausted"
+                            },
+                            "retryAfterMs": {
+                              "type": "number",
+                              "description": "Milliseconds to wait before retrying"
+                            }
+                          },
+                          "required": [
+                            "scope",
+                            "retryAfterMs"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message",
+                        "data"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": false
+                        },
+                        "code": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "number"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "503",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": true
+                        },
+                        "code": {
+                          "const": "E_SERVICE_UNAVAILABLE"
+                        },
+                        "status": {
+                          "const": 503
+                        },
+                        "message": {
+                          "type": "string",
+                          "default": "Service temporarily unavailable — the rate-limit store was unreachable (fail-closed)."
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": false
+                        },
+                        "code": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "number"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/key-proof/status": {
+      "get": {
+        "operationId": "keyProof.status",
+        "summary": "Poll a key-add ceremony",
+        "description": "Where the ceremony behind a code has got to. **Takes no authentication** — the code is the capability, and this is scoped to nothing else.\n\nThis is the leg a CLI waits on after presenting: the identity's owner has to adopt or reject in their browser, and until they do the answer is `presented`.\n\nWatch `stale`. While `presented`, it turns true if another writer moves the identity's chain head — the stored envelope is bound to the head it was signed against, so it can no longer be adopted as-is. Re-resolve the code, sign a fresh envelope for the **same key** with the new `prevCID`, and present it again; the owner's approval carries across, and their browser retries the adoption on its own.\n\nOn `adopted`, `onAdopted` carries the DID, the chain-local key id, and the CID of the operation that added it — enough to fetch the chain from the relay the resolution named and file the key locally without asking anything else. **It is served only while the ceremony's ten minutes are still running.** Past `expiresAt` the answer narrows to the bare `status`: a spent code must not stay a permanent handle on somebody's identity, and a CLI polling its own ceremony has the receipt seconds after presenting — long before that matters.\n\n`rejected` is not an error: the person declined a key they did not recognize, nothing was added, and the honest thing to tell your user is exactly that.\n\nA code this deployment never issued is refused. A code it DID issue answers its real state, including after that state is terminal — which a caller needs, since the whole point of polling is to learn how the ceremony ended. So this endpoint does distinguish a real spent code from a fabricated one. That is one bit, it is deliberate, and it is what the rate limit is in front of; the 8-character code space is not a secret this endpoint is defending, the nonce and the signature are.",
+        "tags": [
+          "Key proof"
+        ],
+        "parameters": [
+          {
+            "name": "code",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The ceremony code this CLI presented against",
+              "examples": [
+                "K7M2QXPA"
+              ]
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "enum": [
+                        "pending",
+                        "presented",
+                        "adopted",
+                        "rejected",
+                        "failed",
+                        "expired"
+                      ],
+                      "type": "string",
+                      "description": "`pending` = nobody has presented an envelope. `presented` = yours verified and the identity’s owner is deciding. `adopted` = they adopted it and the key is on the chain (see `onAdopted`). `rejected` = they declined; **nothing was added**, and that is not an error. `failed` = an envelope was refused at the signature; the ceremony is burned. `expired` = the ten minutes ran out"
+                    },
+                    "stale": {
+                      "type": "boolean",
+                      "description": "Present only while `presented`. True when the chain head has moved since your envelope was signed, so it can no longer be adopted as-is. **Re-resolve the code and present a fresh envelope for the same key** — that is admitted, and the owner’s approval carries across it"
+                    },
+                    "onAdopted": {
+                      "type": "object",
+                      "properties": {
+                        "did": {
+                          "type": "string",
+                          "pattern": "^did:dfos:[2346789acdefhknrtvz]{31}$",
+                          "description": "The identity chain the key was added to",
+                          "examples": [
+                            "did:dfos:6encc4akrze2ah9kntzd9tc8zr24crc"
+                          ]
+                        },
+                        "keyId": {
+                          "type": "string",
+                          "description": "The chain-local id the key was given. The DID URL a verifier sees is `<did>#<keyId>`",
+                          "examples": [
+                            "key_4h2ndv79fckae3rz6t8v2d"
+                          ]
+                        },
+                        "chainOpCID": {
+                          "type": "string",
+                          "description": "CID of the operation that added the key, with your envelope embedded in it — the receipt anyone can go read",
+                          "examples": [
+                            "bafyreib2rxk3rhqhbvpaowvtdcnqvbtwbctvvbrqjhkgvhvcnpi7zdkeqm"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "did",
+                        "keyId",
+                        "chainOpCID"
+                      ],
+                      "additionalProperties": false,
+                      "description": "Present only on `adopted`"
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Where one key-add ceremony has got to",
+                  "examples": [
+                    {
+                      "status": "presented",
+                      "stale": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": true
+                        },
+                        "code": {
+                          "const": "E_INVALID_REQUEST"
+                        },
+                        "status": {
+                          "const": 400
+                        },
+                        "message": {
+                          "type": "string",
+                          "default": "The request was refused. Unknown, expired, spent and wrong-nonce ceremonies all answer \"this ceremony is not open\" — that is a single statement, so there is nothing to learn by varying it. Only a bad SIGNATURE consumes the ceremony; every other refusal leaves the code live, so re-resolve and try again."
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": false
+                        },
+                        "code": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "number"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "429",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": true
+                        },
+                        "code": {
+                          "const": "E_RATE_LIMITED"
+                        },
+                        "status": {
+                          "const": 429
+                        },
+                        "message": {
+                          "type": "string",
+                          "default": "Rate limit exceeded — retry after `retryAfterMs`."
+                        },
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "scope": {
+                              "type": "string",
+                              "description": "Which per-IP budget was exhausted"
+                            },
+                            "retryAfterMs": {
+                              "type": "number",
+                              "description": "Milliseconds to wait before retrying"
+                            }
+                          },
+                          "required": [
+                            "scope",
+                            "retryAfterMs"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message",
+                        "data"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": false
+                        },
+                        "code": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "number"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "503",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": true
+                        },
+                        "code": {
+                          "const": "E_SERVICE_UNAVAILABLE"
+                        },
+                        "status": {
+                          "const": 503
+                        },
+                        "message": {
+                          "type": "string",
+                          "default": "Service temporarily unavailable — the rate-limit store was unreachable (fail-closed)."
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": false
+                        },
+                        "code": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "number"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "data": {}
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/protocol": {
