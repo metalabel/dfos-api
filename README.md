@@ -61,13 +61,14 @@ package's.
 ## Signed requests
 
 Most of the API is anonymous `GET`s, and the default fetch is all you need. A
-small credential-gated family — `GET /v1/profile`, `GET /v1/credential`, and
-the four membership routes — answers about the user who granted your
-application access; route semantics live at
+small gated family — `GET /v1/profile`, `GET /v1/credential`, and the four
+membership routes — answers about one specific person rather than the anonymous
+audience; route semantics live at
 [profile](https://docs.dfos.com/docs/api/profile),
 [memberships](https://docs.dfos.com/docs/api/memberships), and
-[credential](https://docs.dfos.com/docs/api/credential). Users grant that
-access through [Sign In With DFOS](https://protocol.dfos.com/siwd): the
+[credential](https://docs.dfos.com/docs/api/credential). An application acts
+for a user by the access they granted it through
+[Sign In With DFOS](https://protocol.dfos.com/siwd): the
 [setup recipe](https://docs.dfos.com/docs/developers/sign-in-with-dfos/setup)
 takes an application from zero to a credential,
 [local apps](https://docs.dfos.com/docs/developers/sign-in-with-dfos/local-apps)
@@ -79,9 +80,10 @@ Which routes are gated, and which actions they require, is declared in the spec
 itself — the machine-readable convention is the "Advertising in OpenAPI"
 section of [API-AUTH](https://protocol.dfos.com/api-auth).
 
-Calling a gated route takes that credential plus a fresh request proof signed
-per call. Both arrive through the `fetch` seam — `createApiAuthFetch` from
-`@metalabel/dfos-client` (v0.33.0+) builds a signing fetch:
+Calling a gated route on a user's behalf takes that credential plus a fresh
+request proof signed per call. Both arrive through the `fetch` seam —
+`createApiAuthFetch` from `@metalabel/dfos-client` (v0.33.0+) builds a signing
+fetch:
 
 ```ts
 import { createDfosApi } from '@metalabel/dfos-api';
@@ -101,6 +103,19 @@ plaintext requests to non-loopback hosts, and never following redirects. The
 byte contract and the two headers are specified in
 [API-AUTH](https://protocol.dfos.com/api-auth); the signing itself lives in
 `@metalabel/dfos-client`, not here.
+
+Reading your own data takes no credential. The five own-data routes —
+`GET /v1/profile` and the four membership routes — also accept a bare identity
+proof: `Authorization: DFOS <identity-proof JWS>` with no `X-Credential`, signed
+by one of your own identity keys. It authenticates the signing DID and nothing
+more, and on those routes that opens exactly that DID's own data — so a client
+holding its own key reads its own profile and memberships with no grant in the
+picture. Presenting a credential alongside one is malformed (`401`): the two
+headers assert different claims and the API will not pick one.
+`GET /v1/credential` is not in the set — describing a credential takes one. The
+spec marks the five with two security alternatives; `signApiIdentityRequest` from
+`@metalabel/dfos-client` (v0.38.0+) signs the proof, and this form has no
+ready-made fetch adapter, so the caller sets the header itself.
 
 ## Forward compatibility
 
