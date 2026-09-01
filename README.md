@@ -113,9 +113,9 @@ holding its own key reads its own profile and memberships with no grant in the
 picture. Presenting a credential alongside one is malformed (`401`): the two
 headers assert different claims and the API will not pick one.
 `GET /v1/credential` is not in the set — describing a credential takes one. The
-spec marks the five with two security alternatives; `signApiIdentityRequest` from
-`@metalabel/dfos-client` (v0.38.0+) signs the proof, and this form has no
-ready-made fetch adapter, so the caller sets the header itself.
+spec marks the five with two security alternatives; `signApiIdentityRequest` and
+`buildApiIdentityHeaders` from `@metalabel/dfos-client/api-auth` (v0.38.0+)
+produce the proof and its header, which you set on your own `fetch`.
 
 ## Forward compatibility
 
