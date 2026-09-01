@@ -412,8 +412,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Get the granting user’s own profile
-         * @description Read the profile of the user who issued the presented credential. A credential-gated route: it requires an `Authorization: DFOS <request-proof>` header alongside `X-Credential: <credential>`, per the DFOS API-AUTH specification. The credential selects the subject — there is no path parameter and no way to name another user. Requires the `read:profile` **or** `read:email` action on this host, and the response is assembled from the actions the grant actually carries: the profile fields (`username`, `displayName`, `description`, `avatarUrl`, `createdAt`) under `read:profile`, `email` under `read:email`. Only `did` is unconditional, so a `read:email`-only credential receives `{did, email}`.
+         * Get your own profile
+         * @description Read a user's own profile. Two ways to call it, per the DFOS API-AUTH specification. **Your own key:** `Authorization: DFOS <identity-proof>` and no `X-Credential` — the subject is the proof's `kid` DID, which is the signer itself, and the response carries every field, because you are reading your own data. **On a user's behalf:** `Authorization: DFOS <request-proof>` alongside `X-Credential: <credential>` — here the signer is the credential's AUDIENCE (your application) and the subject is the credential chain's ROOT issuer, the user who granted access; the route requires the `read:profile` **or** `read:email` action on this host, and the response is assembled from the actions the grant actually carries: the profile fields (`username`, `displayName`, `description`, `avatarUrl`, `createdAt`) under `read:profile`, `email` under `read:email`, so a `read:email`-only credential receives `{did, email}`. Under both, the presented artifact alone selects the subject: there is no path parameter and no way to name another user, and only `did` is unconditional. Presenting an identity proof together with `X-Credential` is malformed and refused.
          */
         get: operations["profile.getOwnProfile"];
         put?: never;
@@ -432,8 +432,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List the granting user’s space memberships
-         * @description The spaces the user who issued the presented credential currently belongs to, cursor-paginated, each with their role, how many groups they belong to inside it, and when the membership began. Requires the `read:memberships` action on this host. The credential selects the subject — there is no path parameter and no way to name another user. **Every** current membership is listed, private and unlisted spaces included: that is what the consent line grants. Memberships the user has left, and spaces that were deleted, are not listed. Ordered by `joinedAt` ascending with the space `id` as a stable tiebreak, so a walk never skips or repeats. To check ONE space instead of walking, call `GET /membership/{space}`; for the groups themselves, walk `GET /group-memberships`.
+         * List your space memberships
+         * @description The spaces the subject currently belongs to, cursor-paginated, each with their role, how many groups they belong to inside it, and when the membership began. Callable two ways: with your own key (`Authorization: DFOS <identity-proof>`, no `X-Credential`), where the subject is the proof’s `kid` DID — the signer itself; or on a user’s behalf with a request proof plus a credential carrying the `read:memberships` action on this host, where the signer is the credential’s audience (your application) and the subject is the credential chain’s ROOT issuer, the user who granted access. Under both, the presented artifact alone selects the subject: there is no path parameter and no way to name another user. **Every** current membership is listed, private and unlisted spaces included — that is what this route is for, and it is what the consent line grants when a third party is the caller. Memberships the user has left, and spaces that were deleted, are not listed. Ordered by `joinedAt` ascending with the space `id` as a stable tiebreak, so a walk never skips or repeats. To check ONE space instead of walking, call `GET /membership/{space}`; for the groups themselves, walk `GET /group-memberships`.
          */
         get: operations["memberships.listMemberships"];
         put?: never;
@@ -453,7 +453,7 @@ export interface paths {
         };
         /**
          * Check one space membership
-         * @description Is the user who issued the presented credential a member of this space? Returns the single membership entry when they are, and `404` when they are not. **The `404` is collapsed by design: "no such space" and "the user is not a member" are deliberately indistinguishable** — this credential discloses the user's own memberships, never the existence of anything else, so the identifier is matched against their membership rows rather than resolved against the platform. This is the gating primitive for a relying party that only needs to ask "does this user belong to our space". Requires the `read:memberships` action on this host.
+         * @description Is the subject a member of this space? Returns the single membership entry when they are, and `404` when they are not. **The `404` is collapsed by design: "no such space" and "the user is not a member" are deliberately indistinguishable** — these routes disclose the subject's own memberships, never the existence of anything else, so the identifier is matched against their membership rows rather than resolved against the platform. This is the gating primitive for a relying party that only needs to ask "does this user belong to our space". Callable with your own identity proof, where the subject is the proof’s `kid` DID; or on a user’s behalf with a credential carrying the `read:memberships` action on this host, where the subject is the credential chain’s ROOT issuer rather than the application presenting it.
          */
         get: operations["memberships.getMembership"];
         put?: never;
@@ -472,8 +472,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List the granting user’s group memberships
-         * @description The groups the user who issued the presented credential currently belongs to, across every space, cursor-paginated — each with the group (including its EXACT active member count and flat `spaceId` / `spaceDid` refs), their role in it, and when the membership began. Requires the `read:memberships` action on this host. Pass `space` to scope to one space, `role` to scope to a role set. Ordered by `joinedAt` ascending with the group `id` as a stable tiebreak. Correlate `group.spaceId` with `space.id` from `GET /memberships` to reassemble the full graph — two flat walks rather than one nested page.
+         * List your group memberships
+         * @description The groups the subject currently belongs to, across every space, cursor-paginated — each with the group (including its EXACT active member count and flat `spaceId` / `spaceDid` refs), their role in it, and when the membership began. Callable with your own identity proof, where the subject is the proof’s `kid` DID; or on a user’s behalf with a credential carrying the `read:memberships` action on this host, where the subject is the credential chain’s ROOT issuer rather than the application presenting it. Pass `space` to scope to one space, `role` to scope to a role set. Ordered by `joinedAt` ascending with the group `id` as a stable tiebreak. Correlate `group.spaceId` with `space.id` from `GET /memberships` to reassemble the full graph — two flat walks rather than one nested page.
          */
         get: operations["memberships.listGroupMemberships"];
         put?: never;
@@ -493,7 +493,7 @@ export interface paths {
         };
         /**
          * Check one group membership
-         * @description Is the user who issued the presented credential a member of this group? Returns the single group-membership entry when they are, and `404` when they are not. **The `404` is collapsed by design: "no such group" and "the user is not a member" are deliberately indistinguishable** — the identifier is matched against the user's own group memberships rather than resolved against the platform. The symmetric gating primitive to `GET /membership/{space}`, for a relying party gating on a role inside a space rather than on the space itself. Requires the `read:memberships` action on this host.
+         * @description Is the subject a member of this group? Returns the single group-membership entry when they are, and `404` when they are not. **The `404` is collapsed by design: "no such group" and "the user is not a member" are deliberately indistinguishable** — the identifier is matched against the subject's own group memberships rather than resolved against the platform. The symmetric gating primitive to `GET /membership/{space}`, for a relying party gating on a role inside a space rather than on the space itself. Callable with your own identity proof, where the subject is the proof’s `kid` DID; or on a user’s behalf with a credential carrying the `read:memberships` action on this host, where the subject is the credential chain’s ROOT issuer rather than the application presenting it.
          */
         get: operations["memberships.getGroupMembership"];
         put?: never;
@@ -4098,19 +4098,19 @@ export interface operations {
                 content: {
                     "application/json": {
                         did: components["schemas"]["ProtocolDid"];
-                        /** @description The user's handle, or null if unset. A MUTABLE alias — the `did` is the canonical, stable identifier to store. ABSENT (not null) unless the credential carries `read:profile`. */
+                        /** @description The user's handle, or null if unset. A MUTABLE alias — the `did` is the canonical, stable identifier to store. ABSENT (not null) under a credential that does not carry `read:profile`; always present under an identity proof. */
                         username?: string | null;
-                        /** @description Display name, or null. ABSENT (not null) unless the credential carries `read:profile`. */
+                        /** @description Display name, or null. ABSENT (not null) under a credential that does not carry `read:profile`; always present under an identity proof. */
                         displayName?: string | null;
-                        /** @description Profile bio / description, or null. ABSENT (not null) unless the credential carries `read:profile`. */
+                        /** @description Profile bio / description, or null. ABSENT (not null) under a credential that does not carry `read:profile`; always present under an identity proof. */
                         description?: string | null;
-                        /** @description Permanent public CDN URL for the profile avatar, or null when they have none. NOT a signed URL — an avatar is public media, so this link is stable while the media is referenced. ABSENT (not null) unless the credential carries `read:profile`. */
+                        /** @description Permanent public CDN URL for the profile avatar, or null when they have none. NOT a signed URL — an avatar is public media, so this link is stable while the media is referenced. ABSENT (not null) under a credential that does not carry `read:profile`; always present under an identity proof. */
                         avatarUrl?: string | null;
-                        /** @description The account email of the user who issued this credential. PRIVATE — it is served only under a verified request proof, only to the audience the user granted, and only when that grant carries `read:email`. ABSENT (not null) otherwise. Revoking the credential ends access immediately; it does not un-share what was already read. */
+                        /** @description The account email of the authenticated subject. PRIVATE — it is served only under a verified proof: to the subject themselves under an identity proof, and to a third party only when the credential the subject issued carries `read:email`. ABSENT (not null) otherwise. Revoking a credential ends that app’s access immediately; it does not un-share what was already read. */
                         email?: string;
                         /**
                          * Format: date-time
-                         * @description When the user joined DFOS (ISO 8601 UTC). ABSENT unless the credential carries `read:profile`.
+                         * @description When the user joined DFOS (ISO 8601 UTC). ABSENT under a credential that does not carry `read:profile`; always present under an identity proof.
                          */
                         createdAt?: string;
                     };
