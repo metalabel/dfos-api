@@ -4,7 +4,7 @@
   "type": "module",
   "description": "Typed TypeScript client for the public DFOS API — a committed openapi.json snapshot, generated types, and a thin openapi-fetch client",
   "license": "MIT",
-  "author": "Metalabel <hello@metalabel.com> (https://metalabel.com)",
+  "author": "DFOS Inc (https://dfos.com)",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/metalabel/dfos-api.git"
