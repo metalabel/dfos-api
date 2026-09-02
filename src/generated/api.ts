@@ -4129,7 +4129,7 @@ export interface operations {
                         code: "E_AUTHENTICATION_FAILED";
                         /** @constant */
                         status: 401;
-                        /** @default The DFOS request proof was missing, malformed, stale, or did not verify. Responses carry `WWW-Authenticate: DFOS`. Sign a fresh proof over this exact method, host, path, and body. */
+                        /** @default The DFOS request proof was missing, malformed, stale, or did not verify. Sign a fresh proof over this exact method, host, path, and body. Branch on this status and body: responses normally also carry a `WWW-Authenticate: DFOS` challenge header, but that header is best-effort and may arrive remapped, so it must not be the thing a client keys on. */
                         message: string;
                         data?: unknown;
                     } | {
@@ -4289,7 +4289,7 @@ export interface operations {
                         code: "E_AUTHENTICATION_FAILED";
                         /** @constant */
                         status: 401;
-                        /** @default The DFOS request proof was missing, malformed, stale, or did not verify. Responses carry `WWW-Authenticate: DFOS`. Sign a fresh proof over this exact method, host, path, and body. */
+                        /** @default The DFOS request proof was missing, malformed, stale, or did not verify. Sign a fresh proof over this exact method, host, path, and body. Branch on this status and body: responses normally also carry a `WWW-Authenticate: DFOS` challenge header, but that header is best-effort and may arrive remapped, so it must not be the thing a client keys on. */
                         message: string;
                         data?: unknown;
                     } | {
@@ -4446,7 +4446,7 @@ export interface operations {
                         code: "E_AUTHENTICATION_FAILED";
                         /** @constant */
                         status: 401;
-                        /** @default The DFOS request proof was missing, malformed, stale, or did not verify. Responses carry `WWW-Authenticate: DFOS`. Sign a fresh proof over this exact method, host, path, and body. */
+                        /** @default The DFOS request proof was missing, malformed, stale, or did not verify. Sign a fresh proof over this exact method, host, path, and body. Branch on this status and body: responses normally also carry a `WWW-Authenticate: DFOS` challenge header, but that header is best-effort and may arrive remapped, so it must not be the thing a client keys on. */
                         message: string;
                         data?: unknown;
                     } | {
@@ -4633,7 +4633,7 @@ export interface operations {
                         code: "E_AUTHENTICATION_FAILED";
                         /** @constant */
                         status: 401;
-                        /** @default The DFOS request proof was missing, malformed, stale, or did not verify. Responses carry `WWW-Authenticate: DFOS`. Sign a fresh proof over this exact method, host, path, and body. */
+                        /** @default The DFOS request proof was missing, malformed, stale, or did not verify. Sign a fresh proof over this exact method, host, path, and body. Branch on this status and body: responses normally also carry a `WWW-Authenticate: DFOS` challenge header, but that header is best-effort and may arrive remapped, so it must not be the thing a client keys on. */
                         message: string;
                         data?: unknown;
                     } | {
@@ -4790,7 +4790,7 @@ export interface operations {
                         code: "E_AUTHENTICATION_FAILED";
                         /** @constant */
                         status: 401;
-                        /** @default The DFOS request proof was missing, malformed, stale, or did not verify. Responses carry `WWW-Authenticate: DFOS`. Sign a fresh proof over this exact method, host, path, and body. */
+                        /** @default The DFOS request proof was missing, malformed, stale, or did not verify. Sign a fresh proof over this exact method, host, path, and body. Branch on this status and body: responses normally also carry a `WWW-Authenticate: DFOS` challenge header, but that header is best-effort and may arrive remapped, so it must not be the thing a client keys on. */
                         message: string;
                         data?: unknown;
                     } | {
@@ -4971,7 +4971,7 @@ export interface operations {
                         code: "E_AUTHENTICATION_FAILED";
                         /** @constant */
                         status: 401;
-                        /** @default The DFOS request proof was missing, malformed, stale, or did not verify. Responses carry `WWW-Authenticate: DFOS`. Sign a fresh proof over this exact method, host, path, and body. */
+                        /** @default The DFOS request proof was missing, malformed, stale, or did not verify. Sign a fresh proof over this exact method, host, path, and body. Branch on this status and body: responses normally also carry a `WWW-Authenticate: DFOS` challenge header, but that header is best-effort and may arrive remapped, so it must not be the thing a client keys on. */
                         message: string;
                         data?: unknown;
                     } | {
