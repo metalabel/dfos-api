@@ -2,7 +2,7 @@ import createClient from 'openapi-fetch';
 
 import type { paths } from './generated/api.js';
 
-/** The production DFOS API. Matches the `servers` entry in the OpenAPI spec. */
+/** The production DFOS API — the spec's `servers` entry, without its trailing slash. */
 export const DFOS_API_BASE_URL = 'https://api.dfos.com/v1';
 
 export interface DfosApiOptions {

@@ -708,7 +708,7 @@ export interface components {
             avatarUrl: string | null;
             /** @description Resolved public CDN URL for the space header/wallpaper image, or null */
             headerUrl: string | null;
-            /** @description An external domain this space has proven control of via origin binding, or null. NOT the same thing as `domain`, which is the space's DFOS subdomain. The claim is a `DfosOrigin` entry on the space's identity chain, and the domain independently publishes the space's DID back — so a third party can verify both halves without trusting this API (see `GET /protocol`). Null when the space claims no domain, has not yet proven a claim, or the domain now attests a different identity. A domain whose attestation has merely gone quiet keeps its value: silence is not a contradiction. */
+            /** @description An external domain this space has proven control of via origin binding, or null. NOT the same thing as `domain`, which is the space's DFOS subdomain. The claim is a `DfosOrigin` entry on the space's identity chain, and the domain independently publishes the space's DID back — so a third party can verify both halves without trusting this API (see `GET /protocol`). Null when the space claims no domain, has not yet proven a claim, or the domain now attests a different identity. A domain whose attestation has merely gone quiet keeps its value: silence alone is not a contradiction. But a domain that DID contradict this identity and has not attested it since reads null even once it falls silent — going offline does not retract a contradiction. */
             verifiedDomain: string | null;
             /** @description Ordered space profile links (may be empty) */
             links: components["schemas"]["PublicProfileLinkOutput"][];
@@ -793,7 +793,7 @@ export interface components {
             description: string | null;
             /** @description Resolved public CDN URL for the space avatar, or null */
             avatarUrl: string | null;
-            /** @description An external domain this space has proven control of via origin binding, or null. NOT the same thing as `domain`, which is the space's DFOS subdomain. The claim is a `DfosOrigin` entry on the space's identity chain, and the domain independently publishes the space's DID back — so a third party can verify both halves without trusting this API (see `GET /protocol`). Null when the space claims no domain, has not yet proven a claim, or the domain now attests a different identity. A domain whose attestation has merely gone quiet keeps its value: silence is not a contradiction. */
+            /** @description An external domain this space has proven control of via origin binding, or null. NOT the same thing as `domain`, which is the space's DFOS subdomain. The claim is a `DfosOrigin` entry on the space's identity chain, and the domain independently publishes the space's DID back — so a third party can verify both halves without trusting this API (see `GET /protocol`). Null when the space claims no domain, has not yet proven a claim, or the domain now attests a different identity. A domain whose attestation has merely gone quiet keeps its value: silence alone is not a contradiction. But a domain that DID contradict this identity and has not attested it since reads null even once it falls silent — going offline does not retract a contradiction. */
             verifiedDomain: string | null;
             /** @description Ordered space profile links (may be empty) */
             links: components["schemas"]["PublicProfileLinkOutput"][];
@@ -1741,7 +1741,7 @@ export interface components {
             avatarUrl: string | null;
             /** @description Profile bio / description, or null */
             bio: string | null;
-            /** @description A domain this user has proven control of via origin binding, or null. The claim is a `DfosOrigin` entry on the user's identity chain, and the domain independently publishes the user's DID back — so a third party can verify both halves without trusting this API (see `GET /protocol`). Null when the user claims no domain, has not yet proven a claim, or the domain now attests a different identity. A domain whose attestation has merely gone quiet keeps its value: silence is not a contradiction. */
+            /** @description A domain this user has proven control of via origin binding, or null. The claim is a `DfosOrigin` entry on the user's identity chain, and the domain independently publishes the user's DID back — so a third party can verify both halves without trusting this API (see `GET /protocol`). Null when the user claims no domain, has not yet proven a claim, or the domain now attests a different identity. A domain whose attestation has merely gone quiet keeps its value: silence alone is not a contradiction. But a domain that DID contradict this identity and has not attested it since reads null even once it falls silent — going offline does not retract a contradiction. */
             verifiedDomain: string | null;
             /** @description Ordered profile links (may be empty) */
             links: components["schemas"]["PublicProfileLinkOutput"][];
@@ -1773,7 +1773,7 @@ export interface components {
             avatarUrl: string | null;
             /** @description Profile bio / description, or null */
             bio: string | null;
-            /** @description A domain this user has proven control of via origin binding, or null. The claim is a `DfosOrigin` entry on the user's identity chain, and the domain independently publishes the user's DID back — so a third party can verify both halves without trusting this API (see `GET /protocol`). Null when the user claims no domain, has not yet proven a claim, or the domain now attests a different identity. A domain whose attestation has merely gone quiet keeps its value: silence is not a contradiction. */
+            /** @description A domain this user has proven control of via origin binding, or null. The claim is a `DfosOrigin` entry on the user's identity chain, and the domain independently publishes the user's DID back — so a third party can verify both halves without trusting this API (see `GET /protocol`). Null when the user claims no domain, has not yet proven a claim, or the domain now attests a different identity. A domain whose attestation has merely gone quiet keeps its value: silence alone is not a contradiction. But a domain that DID contradict this identity and has not attested it since reads null even once it falls silent — going offline does not retract a contradiction. */
             verifiedDomain: string | null;
             /** @description Ordered profile links (may be empty) */
             links: components["schemas"]["PublicProfileLinkOutput"][];
