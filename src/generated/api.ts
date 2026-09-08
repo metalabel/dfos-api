@@ -53,7 +53,9 @@ export interface paths {
         };
         /**
          * List a space public feed
-         * @description List the publicly-reachable posts in a space, newest first by default, cursor-paginated. Optionally filter by format, public topic, or publication window, and select oldest-first ordering. Only posts explicitly published to the public surface are returned (a public per-post view-access override, or a post in a topic marked world-readable). Returns 404 if the space has no public profile.
+         * @description List the posts in a space, newest first by default, cursor-paginated. Optionally filter by format, topic, or publication window, and select oldest-first ordering.
+         *
+         *     **Anonymously**, only posts explicitly published to the public surface are returned (a public per-post view-access override, or a post in a topic marked world-readable). **With a credential covering this space and `read:posts`** (or a bare identity proof), the feed is the one the granting user sees: every post their membership reaches, with the full body and attachments where they genuinely read it, and a `viewer` block per post. A valid credential that does NOT cover this space returns exactly the anonymous feed — a grant only ever adds. Returns 404 if the space has no public profile, for every caller alike.
          */
         get: operations["posts.listPosts"];
         put?: never;
@@ -72,10 +74,60 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Get a public post
-         * @description Fetch a single post in a space by ID. Returns a discriminated union on `state`: `eligible` (with the full public post content) when the post is anonymously readable, or `gated` (with a slim space CTA, no content) when the post exists in this public space but an anonymous caller cannot read it. Returns 404 if the space has no public profile, the post does not exist, or the post is reached through the wrong space.
+         * Get a post
+         * @description Fetch a single post in a space by ID. Returns a discriminated union on `state`: `eligible` (with the post content) when the caller can read it, or `gated` (with a slim space CTA, no content) when the post exists in this public space but the caller cannot.
+         *
+         *     **With a credential covering this space and `read:posts`** (or a bare identity proof), "can read" means what the granting user can read, so a members-only post comes back `eligible` with the full body, attachments, and a `viewer` block. A valid credential that does NOT cover this space returns exactly the anonymous response. Returns 404 if the space has no public profile, the post does not exist, or the post is reached through the wrong space — the same 404, for every caller alike.
          */
         get: operations["posts.getPost"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/spaces/{space}/posts/{postId}/comments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a post’s comments
+         * @description The comment thread on a post, as the granting user sees it — cursor-paginated, flat, root comments by default.
+         *
+         *     Requires `read:posts` covering this space under the delegated profile, or a bare identity proof. There is NO anonymous projection: comment visibility inherits the post's everywhere in DFOS, and the conversation under a post is space interior rather than something the space published. Every refusal that is not an authentication failure collapses into the SAME 404 as an unknown post — a grant that does not reach this space, a post in another space, a post the user cannot read, and a post that does not exist are one answer.
+         *
+         *     Pass `parentCommentId` to walk one comment's replies instead of the roots.
+         */
+        get: operations["comments.listPostComments"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/feed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The cross-space feed
+         * @description The granting user's own post feed across the spaces this grant reaches — newest first, cursor-paginated, one flat stream. Each item carries the space it came from.
+         *
+         *     Requires `read:posts` under the delegated profile, or a bare identity proof for a caller reading their own feed. The reach is the grant's: a credential covering all the user's spaces feeds every space they are an active member of, including ones joined later; a credential naming particular spaces feeds exactly those. A space the user has left contributes nothing and is not reported — losing a space looks like silence, not an error. A caller in no reachable space gets an empty page.
+         *
+         *     Pinned posts are NOT hoisted: a pin is a fact about one space's own feed, and hoisting every space's pins onto page one would bury the chronology this route exists for.
+         */
+        get: operations["feed.listFeed"];
         put?: never;
         post?: never;
         delete?: never;
@@ -870,6 +922,7 @@ export interface components {
                 /** @description The post content chain's current head operation CID */
                 headOpCid: string;
             };
+            viewer?: components["schemas"]["PublicPostViewerOutput"];
         };
         /**
          * @description Post format: `short-post` (a short, typically untitled note) or `long-post` (a titled article). Open enum — treat an unrecognized value as a generic post.
@@ -954,7 +1007,7 @@ export interface components {
                 /** @description Entity kind. Current values: `post`, `space`, or `event`. Open enum — clients must render unknown values as ordinary links. */
                 kind: string;
             }[];
-            /** @description True when the body was truncated at a fold marker — only the above-fold teaser is present (the public surface is always the non-reader projection). Absent when the post has no fold. */
+            /** @description True when the body was truncated at a fold marker — only the above-fold teaser is present. An anonymous read is always the non-reader projection, so a folded post is always truncated for it; a member projection carries the full body when the caller genuinely reads the post. Absent when the post has no fold. */
             folded?: boolean;
             /** @description Canonical public web permalink for the post — the space public host (custom domain, else the `space-{id}` subdomain) plus the `/post/{slug}-{id}` path. */
             canonicalUri?: string;
@@ -979,11 +1032,152 @@ export interface components {
              * @description When the post was last updated (ISO 8601 UTC)
              */
             updatedAt: string;
+            viewer?: components["schemas"]["PublicPostViewerOutput"];
         };
         /** @description A cursor-paginated page of public posts */
         PublicPostPageOutput: {
             /** @description Page of public posts */
             items: components["schemas"]["PublicPostListItemOutput"][];
+            /** @description Opaque cursor for the next page (null if no more results forward). Pass back verbatim as `after`; do not parse. */
+            nextCursor: string | null;
+            /** @description Opaque cursor for the previous page (null if at the beginning). Optional — may be omitted on responses that do not support backward paging. Pass back verbatim as `before`; do not parse. */
+            previousCursor?: string | null;
+            /** @description Total count of matching items (null if not computed). Optional — may be omitted entirely; clients must not depend on its presence. */
+            totalCount?: number | null;
+        };
+        /** @description The authenticated caller's own relationship to this post. Present ONLY on a member projection — a request that presented a credential (or identity proof) reaching this space. Absent on every anonymous response. */
+        PublicPostViewerOutput: {
+            /** @description Whether the authenticated caller has upvoted this post. */
+            upvoted: boolean;
+        };
+        /** @description The space a feed item belongs to */
+        FeedSpaceRefOutput: {
+            /**
+             * @description The space's protocol DID — the canonical, stable identifier. Pass it back as `{space}` on any space-addressed route.
+             * @example did:dfos:6encc4akrze2ah9kntzd9tc8zr24crc
+             */
+            id: string;
+            /** @description Space display name, or null when it has none */
+            name: string | null;
+            /** @description The space's public web address (custom domain, else the `space-{id}` subdomain). Present for every space; a space with no public profile still has a canonical address, which is simply not anonymously reachable. */
+            url: string;
+        };
+        /** @description A post in the cross-space feed, with its space */
+        FeedItemOutput: {
+            /**
+             * @description Post ID (use as `{postId}` on the single-post route)
+             * @example post_6encc4akrze2ah9kntzd9t
+             */
+            id: string;
+            /**
+             * @description Server-generated URL slug for the post
+             * @example building-a-more-generous-internet
+             */
+            slug: string;
+            format: components["schemas"]["PublicPostFormat"];
+            /**
+             * @description Post title
+             * @example Building a more generous internet
+             */
+            title: string | null;
+            /**
+             * @description Server-derived display label: the title when present, else a short markdown-stripped excerpt of the (above-fold) body, else null. Standardizes the untitled-post fallback; never derived from below-fold content.
+             * @example Building a more generous internet
+             */
+            displayTitle: string | null;
+            /**
+             * @description Truncated plain-text preview of the post body (markdown-stripped)
+             * @example A field guide to shared infrastructure for creative communities.
+             */
+            excerpt: string | null;
+            /** @description Post author */
+            author: components["schemas"]["PublicAuthorOutput"] | null;
+            /** @description Post cover image, when present */
+            cover?: components["schemas"]["PublicMediaOutput"];
+            /** @description Number of upvotes on the post */
+            upvoteCount: number;
+            /** @description Number of comments on the post */
+            commentCount: number;
+            /** @description Whether the space has pinned this post. The feed is ordered purely by recency (newest first); a client may use this flag to surface pinned posts itself. */
+            isPinned: boolean;
+            /**
+             * Format: date-time
+             * @description When the post was published (ISO 8601 UTC)
+             */
+            publishedAt: string;
+            /**
+             * Format: date-time
+             * @description When the post was last updated (ISO 8601 UTC)
+             */
+            updatedAt: string;
+            /** @description Canonical public web permalink for the post — the space public host (custom domain, else the `space-{id}` subdomain) plus the `/post/{slug}-{id}` path. Same value as on the single-post response. */
+            canonicalUri?: string;
+            /** @description Protocol proof-plane handles for this post's content chain. Present iff the post's chain exists; absent for posts created in the last ~30 seconds (creation settlement) and legacy/ineligible posts. Combine with `GET /protocol` to fetch and verify the chain from the relay. */
+            protocol?: {
+                /** @description The post's protocol content-chain id */
+                contentId: string;
+                /** @description The post content chain's current head operation CID */
+                headOpCid: string;
+            };
+            viewer?: components["schemas"]["PublicPostViewerOutput"];
+            space: components["schemas"]["FeedSpaceRefOutput"];
+        };
+        /** @description A cursor-paginated page of the cross-space feed */
+        FeedPageOutput: {
+            /** @description Page of cross-space feed items */
+            items: components["schemas"]["FeedItemOutput"][];
+            /** @description Opaque cursor for the next page (null if no more results forward). Pass back verbatim as `after`; do not parse. */
+            nextCursor: string | null;
+            /** @description Opaque cursor for the previous page (null if at the beginning). Optional — may be omitted on responses that do not support backward paging. Pass back verbatim as `before`; do not parse. */
+            previousCursor?: string | null;
+            /** @description Total count of matching items (null if not computed). Optional — may be omitted entirely; clients must not depend on its presence. */
+            totalCount?: number | null;
+        };
+        /**
+         * @description Thread ordering. `newest` (default) — most recently active threads first, where a thread's activity is the latest of its root and its replies. `oldest` — the reverse. `top` — most upvoted first. Open enum; only send values supported by the current contract.
+         * @example newest
+         * @enum {string}
+         */
+        PublicCommentSort: "newest" | "oldest" | "top";
+        /** @description A comment on a post */
+        PublicCommentOutput: {
+            /**
+             * @description Comment ID. Pass it back as `parentCommentId` to walk its replies.
+             * @example post_6encc4akrze2ah9kntzd9t
+             */
+            id: string;
+            /** @description The ROOT post this comment belongs to — the same id the route was called with. */
+            postId: string;
+            /** @description The comment this one replies to. Absent on a root comment. */
+            parentCommentId?: string;
+            /** @description Comment author */
+            author: components["schemas"]["PublicAuthorOutput"] | null;
+            /** @description Comment body (markdown) */
+            body: string | null;
+            /**
+             * Format: date-time
+             * @description When the comment was published (ISO 8601 UTC)
+             */
+            publishedAt: string;
+            /**
+             * Format: date-time
+             * @description The instant this row is ORDERED by, and the value the cursor carries. On a root comment it is the thread's last activity — the later of the comment's own publication and its most recent reply — so an active thread sorts ahead of an older one under `newest`. On a reply it is the reply's own `publishedAt`.
+             */
+            activityAt: string;
+            /** @description Number of upvotes on the comment */
+            upvoteCount: number;
+            /** @description Number of replies to this comment. Always 0 on a reply. */
+            replyCount: number;
+            /** @description The authenticated caller's own relationship to this comment. This route is always authenticated, so the block is always present. */
+            viewer?: {
+                /** @description Whether the authenticated caller has upvoted this comment. */
+                upvoted: boolean;
+            };
+        };
+        /** @description A cursor-paginated page of post comments */
+        PublicCommentPageOutput: {
+            /** @description Page of comments */
+            items: components["schemas"]["PublicCommentOutput"][];
             /** @description Opaque cursor for the next page (null if no more results forward). Pass back verbatim as `after`; do not parse. */
             nextCursor: string | null;
             /** @description Opaque cursor for the previous page (null if at the beginning). Optional — may be omitted on responses that do not support backward paging. Pass back verbatim as `before`; do not parse. */
@@ -2440,6 +2634,199 @@ export interface operations {
                         message: string;
                         data?: unknown;
                     };
+                };
+            };
+            /** @description 429 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_RATE_LIMITED";
+                        /** @constant */
+                        status: 429;
+                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
+                        message: string;
+                        data: {
+                            /** @description Which per-IP budget was exhausted */
+                            scope: string;
+                            /** @description Milliseconds to wait before retrying */
+                            retryAfterMs: number;
+                        };
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 503 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_SERVICE_UNAVAILABLE";
+                        /** @constant */
+                        status: 503;
+                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+        };
+    };
+    "comments.listPostComments": {
+        parameters: {
+            query?: {
+                parentCommentId?: string;
+                sort?: components["schemas"]["PublicCommentSort"];
+                limit?: number;
+                after?: string;
+                before?: string;
+            };
+            header?: never;
+            path: {
+                space: string;
+                postId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicCommentPageOutput"];
+                };
+            };
+            /** @description 404 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_NOT_FOUND";
+                        /** @constant */
+                        status: 404;
+                        /** @default Not found. A missing space and a non-public (private) one return a byte-identical 404 by design — the two are deliberately indistinguishable (no existence leak). */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 429 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_RATE_LIMITED";
+                        /** @constant */
+                        status: 429;
+                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
+                        message: string;
+                        data: {
+                            /** @description Which per-IP budget was exhausted */
+                            scope: string;
+                            /** @description Milliseconds to wait before retrying */
+                            retryAfterMs: number;
+                        };
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 503 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_SERVICE_UNAVAILABLE";
+                        /** @constant */
+                        status: 503;
+                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+        };
+    };
+    "feed.listFeed": {
+        parameters: {
+            query?: {
+                limit?: number;
+                after?: string;
+                before?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedPageOutput"];
                 };
             };
             /** @description 429 */
