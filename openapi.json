@@ -24,7 +24,11 @@
         "x-dfos-actions": {
           "read:profile": "Read the granting user's own profile — handle, display name, bio, avatar, and join date. The account email address is excluded; that is `read:email`.",
           "read:email": "Read the granting user's account email address.",
-          "read:memberships": "Read the granting user's own memberships — the spaces and groups the account belongs to, and its roles in them, private and unlisted spaces included."
+          "read:memberships": "Read the granting user's own memberships — the spaces and groups the account belongs to, and its roles in them, private and unlisted spaces included.",
+          "read:posts": "Read posts and their comments as the granting user sees them, in the spaces this grant covers — including private spaces they belong to and content they have paid for. Comment visibility follows the post, so there is no separate token for it.",
+          "write:upvotes": "Upvote and un-upvote posts and comments AS the granting user, in the spaces this grant covers. It writes their name onto a signal other members can see.",
+          "write:comments": "Write, edit, and delete the granting user's OWN comments, in the spaces this grant covers. It never reaches anyone else's comments and never moderates.",
+          "write:posts": "Write, edit, and delete the granting user's OWN posts, in the spaces this grant covers. Text only: it never announces, broadcasts, pins, backdates, or moderates, and it never touches anyone else's posts."
         },
         "description": "A request proof: a short-lived JWS signed by the key the credential was issued to, binding this exact method, host, path, and body. Carried as `Authorization: DFOS <jws>`. Deliberately NOT `Bearer` — nothing here is a bearer token, and naming it one invites the logging, caching, and forwarding this artifact exists to make useless. See https://protocol.dfos.com/api-auth."
       },
@@ -4141,6 +4145,42 @@
               ]
             ]
           },
+          "attenuation": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "resource": {
+                  "type": "string",
+                  "description": "The resource this entry grants over. `api:<host>` is the whole API — for a space-level action that means EVERY space the user belongs to, including ones they join later. `api:<host>/spaces/<31-char space id>` is one named space.",
+                  "examples": [
+                    "api:api.dfos.com"
+                  ]
+                },
+                "action": {
+                  "type": "string",
+                  "description": "The comma-separated SET of action tokens this entry carries, in DFOS’s canonical order.",
+                  "examples": [
+                    "read:profile,read:email"
+                  ]
+                }
+              },
+              "required": [
+                "resource",
+                "action"
+              ],
+              "additionalProperties": false
+            },
+            "description": "THE GRANT ITSELF, exactly as it was signed — one entry per resource. `scopes` above says WHAT this credential carries; this says what it carries WHERE, and it is the authoritative answer to both. A credential minted before grants had places carries a single `api:<host>` entry; one narrowed to specific spaces carries one child entry each, and may carry no `api:<host>` entry at all. Treat unrecognized resource forms as opaque strings and do not infer coverage from their shape — the grant you hold is the authority, not a rule you derived from it.",
+            "examples": [
+              [
+                {
+                  "resource": "api:api.dfos.com",
+                  "action": "read:profile,read:email"
+                }
+              ]
+            ]
+          },
           "tier": {
             "$ref": "#/components/schemas/PublicCredentialTier"
           },
@@ -4173,6 +4213,7 @@
           "subjectDid",
           "clientDid",
           "scopes",
+          "attenuation",
           "tier",
           "domain",
           "issuedAt",

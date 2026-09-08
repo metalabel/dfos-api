@@ -2044,6 +2044,27 @@ export interface components {
              *     ]
              */
             scopes: string[];
+            /**
+             * @description THE GRANT ITSELF, exactly as it was signed — one entry per resource. `scopes` above says WHAT this credential carries; this says what it carries WHERE, and it is the authoritative answer to both. A credential minted before grants had places carries a single `api:<host>` entry; one narrowed to specific spaces carries one child entry each, and may carry no `api:<host>` entry at all. Treat unrecognized resource forms as opaque strings and do not infer coverage from their shape — the grant you hold is the authority, not a rule you derived from it.
+             * @example [
+             *       {
+             *         "resource": "api:api.dfos.com",
+             *         "action": "read:profile,read:email"
+             *       }
+             *     ]
+             */
+            attenuation: {
+                /**
+                 * @description The resource this entry grants over. `api:<host>` is the whole API — for a space-level action that means EVERY space the user belongs to, including ones they join later. `api:<host>/spaces/<31-char space id>` is one named space.
+                 * @example api:api.dfos.com
+                 */
+                resource: string;
+                /**
+                 * @description The comma-separated SET of action tokens this entry carries, in DFOS’s canonical order.
+                 * @example read:profile,read:email
+                 */
+                action: string;
+            }[];
             tier: components["schemas"]["PublicCredentialTier"];
             /**
              * @description Bare hostname the grant was issued to, or `null`. **A null domain means a LOCAL application** — the `loopback` tier has no domain because a local client proved a key rather than an origin, so there is no hostname that would be true to show. Fall back to `clientDid` rather than inventing one.
