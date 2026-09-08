@@ -253,7 +253,7 @@ export interface paths {
         };
         /**
          * List a space public releases
-         * @description List the releases a space has published public pages for, newest-published first (`firstPublishedAt` descending), cursor-paginated. Returns 404 if the space has no public profile (byte-identical to every other not-found — no existence leak). Releases still in draft, preview or archived phases, releases scoped to members or a group, and releases with no slug never appear and are never counted; an empty list is a valid answer and reveals nothing.
+         * @description List the releases a space has published public pages for, newest-published first (`publishedAt` descending), cursor-paginated. Returns 404 if the space has no public profile (byte-identical to every other not-found — no existence leak). Unpublished releases and releases with no slug never appear and are never counted; an empty list is a valid answer and reveals nothing.
          */
         get: operations["releases.listSpaceReleases"];
         put?: never;
@@ -273,7 +273,7 @@ export interface paths {
         };
         /**
          * List public releases across all spaces
-         * @description List releases with a public page across every publicly-discoverable space, newest-published first (`firstPublishedAt` descending), cursor-paginated. Each item is the same summary a space's own shelf returns plus the `space` it belongs to. The space gate matches public space discovery (`GET /spaces`) rather than direct space lookup, so a space excluded from the directory is absent here even though its own release routes still serve it. Releases in draft, preview or archived phases, releases scoped to members or a group, and releases with no slug never appear; an empty page is a valid answer and reveals nothing. No filters beyond pagination in this version.
+         * @description List releases with a public page across every publicly-discoverable space, newest-published first (`publishedAt` descending), cursor-paginated. Each item is the same summary a space's own shelf returns plus the `space` it belongs to. The space gate matches public space discovery (`GET /spaces`) rather than direct space lookup, so a space excluded from the directory is absent here even though its own release routes still serve it. Unpublished releases and releases with no slug never appear; an empty page is a valid answer and reveals nothing. No filters beyond pagination in this version.
          */
         get: operations["releases.listReleases"];
         put?: never;
@@ -293,7 +293,7 @@ export interface paths {
         };
         /**
          * Get a public release
-         * @description Fetch a release's public page by its slug, with its media wall, credits, composed products, and public dates. Returns 404 if the space has no public profile, the slug matches no release, the release belongs to another space, it is in a draft, preview or archived phase, it is scoped to space or group members, or it has been deleted — all byte-identical (no existence leak).
+         * @description Fetch a release's public page by its slug, with its media wall, credits, composed products, and public dates. Returns 404 if the space has no public profile, the slug matches no release, the release belongs to another space, it has not been published, or it has been deleted — all byte-identical (no existence leak).
          */
         get: operations["releases.getSpaceRelease"];
         put?: never;
@@ -1328,7 +1328,7 @@ export interface components {
                  */
                 startDate: string | null;
             };
-            /** @description The release this product belongs to, when a publicly-visible one holds it — a one-line context chip, not a projection of the release. SINGULAR: a product composed into several releases carries the EARLIEST-published public one (ties broken by release id). Absent when the product is in no release, and equally absent when every release holding it is in a draft, preview or archived phase or is scoped to members or a group — the two are deliberately indistinguishable. Read `GET /spaces/{space}/releases/{slug}` for the release itself. */
+            /** @description The release this product belongs to, when a publicly-visible one holds it — a one-line context chip, not a projection of the release. SINGULAR: a product composed into several releases carries the EARLIEST-published public one (ties broken by release id). Absent when the product is in no release, and equally absent when every release holding it is unpublished — the two are deliberately indistinguishable. Read `GET /spaces/{space}/releases/{slug}` for the release itself. */
             release?: components["schemas"]["PublicProductReleaseRefOutput"];
             /**
              * Format: date-time
@@ -1412,7 +1412,7 @@ export interface components {
                  */
                 startDate: string | null;
             };
-            /** @description The release this product belongs to, when a publicly-visible one holds it — a one-line context chip, not a projection of the release. SINGULAR: a product composed into several releases carries the EARLIEST-published public one (ties broken by release id). Absent when the product is in no release, and equally absent when every release holding it is in a draft, preview or archived phase or is scoped to members or a group — the two are deliberately indistinguishable. Read `GET /spaces/{space}/releases/{slug}` for the release itself. */
+            /** @description The release this product belongs to, when a publicly-visible one holds it — a one-line context chip, not a projection of the release. SINGULAR: a product composed into several releases carries the EARLIEST-published public one (ties broken by release id). Absent when the product is in no release, and equally absent when every release holding it is unpublished — the two are deliberately indistinguishable. Read `GET /spaces/{space}/releases/{slug}` for the release itself. */
             release?: components["schemas"]["PublicProductReleaseRefOutput"];
             /**
              * Format: date-time
@@ -1434,10 +1434,10 @@ export interface components {
             totalCount?: number | null;
         };
         /**
-         * @description Where the release is in its public life. `presale` = announced, selling ahead of the date; `live` = out; `closed` = the run has ended and the page is archival. Open enum — treat an unrecognized value as an opaque string.
+         * @description Where the release is in time, DERIVED from its dates rather than stored. `upcoming` = published, but `releasesAt` is still in the future; `live` = out; `ended` = `closesAt` has passed and the page is archival. Open enum — treat an unrecognized value as an opaque string.
          * @enum {string}
          */
-        PublicReleaseStatus: "presale" | "live" | "closed";
+        PublicReleaseState: "upcoming" | "live" | "ended";
         /** @description A credit on a release */
         PublicReleaseCreditOutput: {
             /**
@@ -1555,7 +1555,7 @@ export interface components {
              * @example Blue Record
              */
             name: string;
-            status: components["schemas"]["PublicReleaseStatus"];
+            state: components["schemas"]["PublicReleaseState"];
             /** @description One-line blurb. Newlines are not expected here; render as a single line of text. */
             shortDescription: string | null;
             /** @description Cover image, when the release has one. Always a PUBLIC, permanently-hosted CDN image — this endpoint never emits a signed or expiring URL. */
@@ -1566,20 +1566,26 @@ export interface components {
              */
             catalogNumber: string | null;
             /**
-             * @description The release's own date as a bare calendar date, `YYYY-MM-DD`, with NO time zone — the all-day convention, because a release date is a date everywhere rather than an instant somewhere. Null when the release is undated. Unrelated to `firstPublishedAt`, which is when this PAGE first became public.
-             * @example 2026-09-12
-             */
-            releaseDate: string | null;
-            /**
              * @description Freeform place string, purely presentational. Never geocoded, never a key.
              * @example Austin, TX
              */
             location: string | null;
             /**
-             * @description When this release FIRST became public (ISO 8601 UTC), stamped once and never re-stamped — taking a release down and putting it back must not reshuffle a reader's shelf. The index is ordered by this value, newest first. Null only for a release that reached a public phase without ever being stamped.
+             * Format: date-time
+             * @description When this release was published (ISO 8601 UTC). The index is ordered by this value, newest first. A runner who unpublishes and re-publishes moves it, and the shelf re-sorts.
              * @example 2026-09-01T17:00:00.000Z
              */
-            firstPublishedAt: string | null;
+            publishedAt: string;
+            /**
+             * @description When the release OPENS, when the runner named a date (ISO 8601 UTC). While it is in the future the `state` is `upcoming`. Null when the release has no opening date, which is the common case.
+             * @example 2026-09-12T17:00:00.000Z
+             */
+            releasesAt: string | null;
+            /**
+             * @description When the release CLOSES, when the runner named a date (ISO 8601 UTC). Once it has passed the `state` is `ended` and the page stays readable as an archival record. Null when the release has no closing date.
+             * @example 2026-10-12T17:00:00.000Z
+             */
+            closesAt: string | null;
             /**
              * @description How many products in the composition are PUBLICLY purchasable — the same set the release page lists, counted. Never the raw composition size, which would disclose how much of a release a space has not published.
              * @example 2
@@ -1603,7 +1609,7 @@ export interface components {
              * @example Blue Record
              */
             name: string;
-            status: components["schemas"]["PublicReleaseStatus"];
+            state: components["schemas"]["PublicReleaseState"];
             /** @description One-line blurb. Newlines are not expected here; render as a single line of text. */
             shortDescription: string | null;
             /** @description Cover image, when the release has one. Always a PUBLIC, permanently-hosted CDN image — this endpoint never emits a signed or expiring URL. */
@@ -1614,20 +1620,26 @@ export interface components {
              */
             catalogNumber: string | null;
             /**
-             * @description The release's own date as a bare calendar date, `YYYY-MM-DD`, with NO time zone — the all-day convention, because a release date is a date everywhere rather than an instant somewhere. Null when the release is undated. Unrelated to `firstPublishedAt`, which is when this PAGE first became public.
-             * @example 2026-09-12
-             */
-            releaseDate: string | null;
-            /**
              * @description Freeform place string, purely presentational. Never geocoded, never a key.
              * @example Austin, TX
              */
             location: string | null;
             /**
-             * @description When this release FIRST became public (ISO 8601 UTC), stamped once and never re-stamped — taking a release down and putting it back must not reshuffle a reader's shelf. The index is ordered by this value, newest first. Null only for a release that reached a public phase without ever being stamped.
+             * Format: date-time
+             * @description When this release was published (ISO 8601 UTC). The index is ordered by this value, newest first. A runner who unpublishes and re-publishes moves it, and the shelf re-sorts.
              * @example 2026-09-01T17:00:00.000Z
              */
-            firstPublishedAt: string | null;
+            publishedAt: string;
+            /**
+             * @description When the release OPENS, when the runner named a date (ISO 8601 UTC). While it is in the future the `state` is `upcoming`. Null when the release has no opening date, which is the common case.
+             * @example 2026-09-12T17:00:00.000Z
+             */
+            releasesAt: string | null;
+            /**
+             * @description When the release CLOSES, when the runner named a date (ISO 8601 UTC). Once it has passed the `state` is `ended` and the page stays readable as an archival record. Null when the release has no closing date.
+             * @example 2026-10-12T17:00:00.000Z
+             */
+            closesAt: string | null;
             /**
              * @description How many products in the composition are PUBLICLY purchasable — the same set the release page lists, counted. Never the raw composition size, which would disclose how much of a release a space has not published.
              * @example 2
@@ -1637,11 +1649,11 @@ export interface components {
             longDescription: string | null;
             /** @description The media wall, in the runner's wall order. Entries whose asset is private media are omitted (this surface emits no signed URLs), so an empty wall is a valid answer. */
             media: components["schemas"]["PublicReleaseMediaOutput"][];
-            /** @description Credits, in credit order. Only accepted and text-only credits appear — a pending or declined invitation is absent, and is indistinguishable from a credit that was never offered. */
+            /** @description Credits, in credit order. Display text only — a name and an optional role. If credits ever carry a subject, only accepted ones appear, and a pending invitation is indistinguishable from a credit that was never offered. */
             credits: components["schemas"]["PublicReleaseCreditOutput"][];
             /** @description The composed products, in the release's curated order — the SAME objects `products.getProduct` returns, filtered by the store's own public-visibility rule. A product with no public purchase page is absent from this list while the release page renders normally, and is not counted in `productCount`. */
             products: components["schemas"]["PublicProductOutput"][];
-            /** @description Public calendar events this release points at, soonest first — both the ones the release emitted as phase milestones and organic events attached to it. Each is filtered by the EVENTS visibility rules; an event an anonymous caller may not see, or one with no occurrence in the window this API serves, is simply absent. */
+            /** @description Public calendar events attached to this release, soonest first. Each is filtered by the EVENTS visibility rules; an event an anonymous caller may not see, or one with no occurrence in the window this API serves, is simply absent. */
             events: components["schemas"]["PublicReleaseEventOutput"][];
         };
         /** @description A cursor-paginated page of public releases */
@@ -1672,7 +1684,7 @@ export interface components {
              * @example Blue Record
              */
             name: string;
-            status: components["schemas"]["PublicReleaseStatus"];
+            state: components["schemas"]["PublicReleaseState"];
             /** @description One-line blurb. Newlines are not expected here; render as a single line of text. */
             shortDescription: string | null;
             /** @description Cover image, when the release has one. Always a PUBLIC, permanently-hosted CDN image — this endpoint never emits a signed or expiring URL. */
@@ -1683,20 +1695,26 @@ export interface components {
              */
             catalogNumber: string | null;
             /**
-             * @description The release's own date as a bare calendar date, `YYYY-MM-DD`, with NO time zone — the all-day convention, because a release date is a date everywhere rather than an instant somewhere. Null when the release is undated. Unrelated to `firstPublishedAt`, which is when this PAGE first became public.
-             * @example 2026-09-12
-             */
-            releaseDate: string | null;
-            /**
              * @description Freeform place string, purely presentational. Never geocoded, never a key.
              * @example Austin, TX
              */
             location: string | null;
             /**
-             * @description When this release FIRST became public (ISO 8601 UTC), stamped once and never re-stamped — taking a release down and putting it back must not reshuffle a reader's shelf. The index is ordered by this value, newest first. Null only for a release that reached a public phase without ever being stamped.
+             * Format: date-time
+             * @description When this release was published (ISO 8601 UTC). The index is ordered by this value, newest first. A runner who unpublishes and re-publishes moves it, and the shelf re-sorts.
              * @example 2026-09-01T17:00:00.000Z
              */
-            firstPublishedAt: string | null;
+            publishedAt: string;
+            /**
+             * @description When the release OPENS, when the runner named a date (ISO 8601 UTC). While it is in the future the `state` is `upcoming`. Null when the release has no opening date, which is the common case.
+             * @example 2026-09-12T17:00:00.000Z
+             */
+            releasesAt: string | null;
+            /**
+             * @description When the release CLOSES, when the runner named a date (ISO 8601 UTC). Once it has passed the `state` is `ended` and the page stays readable as an archival record. Null when the release has no closing date.
+             * @example 2026-10-12T17:00:00.000Z
+             */
+            closesAt: string | null;
             /**
              * @description How many products in the composition are PUBLICLY purchasable — the same set the release page lists, counted. Never the raw composition size, which would disclose how much of a release a space has not published.
              * @example 2
