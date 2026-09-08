@@ -60,62 +60,112 @@ package's.
 
 ## Signed requests
 
-Most of the API is anonymous `GET`s, and the default fetch is all you need. A
-small gated family — `GET /v1/profile`, `GET /v1/credential`, and the four
-membership routes — answers about one specific person rather than the anonymous
-audience; route semantics live at
-[profile](https://docs.dfos.com/docs/api/profile),
-[memberships](https://docs.dfos.com/docs/api/memberships), and
-[credential](https://docs.dfos.com/docs/api/credential). An application acts
-for a user by the access they granted it through
+Most of the API is anonymous `GET`s, and the default fetch is all you need. The
+rest describes or acts as one specific person and takes a proof. Which routes
+those are, which proof profiles each accepts, and which action tokens it demands
+is declared in the spec itself — the machine-readable convention is the
+"Advertising in OpenAPI" section of [API-AUTH](https://protocol.dfos.com/api-auth),
+and the spec's own `info.description` walks the classes in prose. In outline:
+
+- **Anonymous** — the default and most of the surface. No header; one
+  projection for everyone.
+- **Gated** — `GET /v1/profile`, the four membership routes,
+  `GET /v1/credential`, `GET /v1/feed`, and
+  `GET /v1/spaces/{space}/posts/{postId}/comments`. Each answers about the
+  person the proof names; route semantics live at
+  [profile](https://docs.dfos.com/docs/api/profile),
+  [memberships](https://docs.dfos.com/docs/api/memberships), and
+  [credential](https://docs.dfos.com/docs/api/credential).
+- **Optional-auth** — `GET /v1/spaces/{space}/posts` and
+  `GET /v1/spaces/{space}/posts/{postId}`. With no header they serve the
+  anonymous projection. With a proof whose grant covers the space under
+  `read:posts` they serve the projection the granting user sees: the whole feed
+  for that space, full bodies where the user genuinely reads a post, and a
+  `viewer` block. A grant only ever adds — a valid proof that does not cover the
+  space gets exactly the anonymous bytes — while a malformed, expired, or revoked
+  proof is still `401`/`403`, never a quiet downgrade.
+- **Writes** — every non-`GET`: posts (`write:posts`), comments
+  (`write:comments`), and upvotes on either (`write:upvotes`), as the granting
+  user, on their own content only, in the spaces the grant covers. Announcing,
+  pinning, broadcasting, and moderating are absent from the request schemas, not
+  rejected by them.
+
+An application acts for a user by the access they granted it through
 [Sign In With DFOS](https://protocol.dfos.com/siwd): the
 [setup recipe](https://docs.dfos.com/docs/developers/sign-in-with-dfos/setup)
 takes an application from zero to a credential,
 [local apps](https://docs.dfos.com/docs/developers/sign-in-with-dfos/local-apps)
 covers CLIs and agents with no domain to stand behind, and
 [credentials](https://docs.dfos.com/docs/developers/sign-in-with-dfos/credentials)
-explains what the grant carries.
+explains what the grant carries. A grant names actions and places: the account
+tokens live on the API as a whole, while `read:posts` and the `write:*` tokens
+are space-level and cover either every space the user belongs to or the spaces
+named at consent. Consent may narrow an ask, so read what was actually granted
+from the credential's attenuation — `GET /v1/credential` returns it as
+`attenuation` — rather than assuming the request was honored whole.
 
-Which routes are gated, and which actions they require, is declared in the spec
-itself — the machine-readable convention is the "Advertising in OpenAPI"
-section of [API-AUTH](https://protocol.dfos.com/api-auth).
-
-Calling a gated route on a user's behalf takes that credential plus a fresh
-request proof signed per call. Both arrive through the `fetch` seam —
-`createApiAuthFetch` from `@metalabel/dfos-client` (v0.33.0+) builds a signing
+Calling a gated route or a write on a user's behalf takes that credential plus a
+fresh request proof signed per call. Both arrive through the `fetch` seam —
+`createApiAuthFetch` from `@metalabel/dfos-client` (v0.54.0+) builds a signing
 fetch:
 
 ```ts
 import { createDfosApi } from '@metalabel/dfos-api';
-import { createApiAuthFetch } from '@metalabel/dfos-client/api-auth'; // v0.33.0+
+import { createApiAuthFetch } from '@metalabel/dfos-client/api-auth'; // v0.54.0+
 
 const api = createDfosApi({
   fetch: createApiAuthFetch({ credential, kid, sign }),
 });
 
 const { data, error } = await api.GET('/profile');
+
+const upvote = await api.PUT('/spaces/{space}/posts/{postId}/upvote', {
+  params: { path: { space: 'home', postId: 'post_6encc4akrze2ah9kntzd9t' } },
+});
 ```
 
-The same signing fetch serves every gated route — which route a call may use is
-the credential's business, not the client's. The adapter signs exactly the
-`Request` the client composes, buffering request bodies in full, refusing
-plaintext requests to non-loopback hosts, and never following redirects. The
-byte contract and the two headers are specified in
+The same signing fetch serves every gated route and every write — which route a
+call may use is the credential's business, not the client's. The adapter signs
+exactly the `Request` the client composes, buffering request bodies in full,
+refusing plaintext requests to non-loopback hosts, and never following
+redirects. From v0.54.0 it also mints a fresh `jti` for every non-`GET` request
+(its `jti` option: `'writes'` by default, `'always'`, or `'never'`), which is
+what the write tier requires:
+
+- **Every write's proof carries a `jti`.** A write without one is `401`. A proof
+  is accepted for its whole freshness window, so replaying one on a read merely
+  re-reads, while replaying one on a write would execute it twice; the `jti` is
+  what makes that impossible.
+- **`409` means "this already happened".** A `jti` already spent inside the
+  window is refused, and the earlier attempt may have succeeded — re-read state
+  and reconcile rather than retrying. A genuine retry carries a new `jti`;
+  resending identical bytes answers `409` until the window lapses.
+- **One body shape, the method you signed.** Request bodies are
+  `application/json` (optionally `; charset=utf-8`) and uncompressed — any other
+  `Content-Encoding` is `415` — and method-override headers or `?_method=` are
+  `400`. The `Request` openapi-fetch composes for a JSON body already satisfies
+  this.
+
+The byte contract and the two headers are specified in
 [API-AUTH](https://protocol.dfos.com/api-auth); the signing itself lives in
 `@metalabel/dfos-client`, not here.
 
-Reading your own data takes no credential. The five own-data routes —
-`GET /v1/profile` and the four membership routes — also accept a bare identity
-proof: `Authorization: DFOS <identity-proof JWS>` with no `X-Credential`, signed
-by one of your own identity keys. It authenticates the signing DID and nothing
-more, and on those routes that opens exactly that DID's own data — so a client
-holding its own key reads its own profile and memberships with no grant in the
-picture. Presenting a credential alongside one is malformed (`401`): the two
-headers assert different claims and the API will not pick one.
-`GET /v1/credential` is not in the set — describing a credential takes one. The
-spec marks the five with two security alternatives; `signApiIdentityRequest` and
-`buildApiIdentityHeaders` from `@metalabel/dfos-client/api-auth` (v0.38.0+)
-produce the proof and its header, which you set on your own `fetch`.
+Reading and writing your own data takes no credential. Every route that accepts
+a credential except `GET /v1/credential` — the own-data reads, `GET /v1/feed`,
+the comments route, the optional-auth post routes, and every write — also
+accepts a bare identity proof: `Authorization: DFOS <identity-proof JWS>` with
+no `X-Credential`, signed by one of your own identity keys. It authenticates the
+signing DID and nothing more, and on those routes that opens exactly that DID's
+own data and own actions, with no space restriction, because there is no third
+party for a grant to attenuate — so a client holding its own key reads its own
+feed and posts as itself with no grant in the picture. Presenting a credential
+alongside one is malformed (`401`): the two headers assert different claims and
+the API will not pick one. `GET /v1/credential` is not in the set — describing a
+credential takes one. The spec marks these operations with the identity
+alternative; `signApiIdentityRequest` and `buildApiIdentityHeaders` from
+`@metalabel/dfos-client/api-auth` produce the proof and its header, which you
+set on your own `fetch`, and a write signed this way carries a `jti` the same
+way (`generateJti()` mints one).
 
 ## Forward compatibility
 
