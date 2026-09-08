@@ -13,8 +13,8 @@ importers:
         version: 0.14.1
     devDependencies:
       '@metalabel/dfos-client':
-        specifier: 0.33.0
-        version: 0.33.0(@metalabel/dfos-protocol@0.33.0(zod@4.4.3))(@metalabel/dfos-web-relay@0.33.0(@metalabel/dfos-protocol@0.33.0(zod@4.4.3))(hono@4.13.4))
+        specifier: 0.54.0
+        version: 0.54.0(@metalabel/dfos-protocol@0.33.0(zod@4.4.3))(@metalabel/dfos-web-relay@0.33.0(@metalabel/dfos-protocol@0.33.0(zod@4.4.3))(hono@4.13.4))
       '@types/node':
         specifier: ^24.10.4
         version: 24.13.3
@@ -216,11 +216,11 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
-  '@metalabel/dfos-client@0.33.0':
-    resolution: {integrity: sha512-FM6DSggxUE7uO7o5w4nKNAB7S10a+REOuWUyMgJucDT2JO/yZUFGx0t2jTpMCOT0/A6rxgIig5DPxxagrkgdeg==}
+  '@metalabel/dfos-client@0.54.0':
+    resolution: {integrity: sha512-sizZZpNLx6scuHBIdOybpIkWnEePsQBm3nX0j87/V5ZTsZ9dyOPSxFViIX3thUY+dF2vDrnLhuAnNBOUoScMRw==}
     peerDependencies:
-      '@metalabel/dfos-protocol': ^0.33.0
-      '@metalabel/dfos-web-relay': ^0.33.0
+      '@metalabel/dfos-protocol': ^0.54.0
+      '@metalabel/dfos-web-relay': ^0.54.0
 
   '@metalabel/dfos-protocol@0.33.0':
     resolution: {integrity: sha512-ba8FKxpL7iONHmQt1XYAcN1oO3nFCckYaB0uOb0WjFNO6FPa9ulo8o3dd5TIKKPLTmunDfXy4HdheEv+0gRHwA==}
@@ -1315,7 +1315,7 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
-  '@metalabel/dfos-client@0.33.0(@metalabel/dfos-protocol@0.33.0(zod@4.4.3))(@metalabel/dfos-web-relay@0.33.0(@metalabel/dfos-protocol@0.33.0(zod@4.4.3))(hono@4.13.4))':
+  '@metalabel/dfos-client@0.54.0(@metalabel/dfos-protocol@0.33.0(zod@4.4.3))(@metalabel/dfos-web-relay@0.33.0(@metalabel/dfos-protocol@0.33.0(zod@4.4.3))(hono@4.13.4))':
     dependencies:
       '@metalabel/dfos-protocol': 0.33.0(zod@4.4.3)
       '@metalabel/dfos-web-relay': 0.33.0(@metalabel/dfos-protocol@0.33.0(zod@4.4.3))(hono@4.13.4)

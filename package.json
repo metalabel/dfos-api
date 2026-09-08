@@ -1,6 +1,6 @@
 {
   "name": "@metalabel/dfos-api",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "type": "module",
   "description": "Typed TypeScript client for the public DFOS API — a committed openapi.json snapshot, generated types, and a thin openapi-fetch client",
   "license": "MIT",
@@ -54,7 +54,7 @@
     "openapi-fetch": "^0.14.1"
   },
   "devDependencies": {
-    "@metalabel/dfos-client": "0.33.0",
+    "@metalabel/dfos-client": "0.54.0",
     "@types/node": "^24.10.4",
     "openapi-typescript": "^7.10.0",
     "tsup": "^8.5.1",

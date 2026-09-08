@@ -22,18 +22,21 @@ export interface DfosApiOptions {
 /**
  * Create a typed client for the public DFOS API.
  *
- * Every operation is anonymous except the gated family — all GETs:
- * `GET /v1/profile`, `GET /v1/credential`, and the membership routes
- * (`GET /v1/memberships`, `GET /v1/membership/{space}`,
- * `GET /v1/group-memberships`, `GET /v1/group-membership/{group}`). The one
- * write, `POST /v1/key-proof/present`, is anonymous by design — its envelope
- * is self-authenticating. To call a gated route on a user's behalf, pass
+ * Most operations are anonymous `GET`s. The rest take a proof, and the spec
+ * declares which: the gated reads (`GET /v1/profile`, `GET /v1/credential`,
+ * the membership routes, `GET /v1/feed`, and a post's comments), the two
+ * optional-auth post routes (anonymous projection with no header, the
+ * granting user's projection when the grant covers the space under
+ * `read:posts`), and every non-`GET`, which writes as the granting user on
+ * their own posts, comments, and upvotes under the `write:*` tokens.
+ * `POST /v1/key-proof/present` is the one anonymous write — its envelope is
+ * self-authenticating. To act for a user, pass
  * `createApiAuthFetch({ credential, kid, sign })` from
- * `@metalabel/dfos-client/api-auth` (v0.33.0+) via the `fetch` option —
- * nothing else about the client changes. The five own-data routes (every
- * gated route except `GET /v1/credential`) also accept a bare identity proof
- * signed by one of your own identity keys, with no credential at all. See the
- * README's "Signed requests" section.
+ * `@metalabel/dfos-client/api-auth` (v0.54.0+) via the `fetch` option; it
+ * signs each request and attaches the per-request `jti` every write requires.
+ * Every credential-accepting route except `GET /v1/credential` also accepts a
+ * bare identity proof signed by one of your own identity keys, with no
+ * credential at all. See the README's "Signed requests" section.
  */
 export function createDfosApi(options: DfosApiOptions = {}) {
   return createClient<paths>({

@@ -21,4 +21,8 @@ const api = createDfosApi({
 
 const { data, error } = await api.GET('/profile');
 
-export { data, error };
+const upvote = await api.PUT('/spaces/{space}/posts/{postId}/upvote', {
+  params: { path: { space: 'home', postId: 'post_6encc4akrze2ah9kntzd9t' } },
+});
+
+export { data, error, upvote };
