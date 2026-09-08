@@ -59,7 +59,17 @@ export interface paths {
          */
         get: operations["posts.listPosts"];
         put?: never;
-        post?: never;
+        /**
+         * Write a post
+         * @description Write a post as the granting user, into a topic they can post in.
+         *
+         *     Text only. `title` decides the format — with one the post is a `long-post`, without one a `short-post` — and there is deliberately no way to attach media, set a cover, announce or broadcast the post, backdate it, override its view access, or fulfil an event: those fields do not exist on this input. Body length limits, the topic's own format policy, and the `post:create` permission are all enforced by the same engine the DFOS app writes through.
+         *
+         *     Requires `write:posts` covering this space under the delegated profile, or a bare identity proof. Returns 404 when the space has no public profile or the topic is one the user cannot reach — the same 404 for every caller, so the route never reports which topics exist.
+         *
+         *     Every write requires a per-request `jti` in the proof (`generateJti()` in the DFOS client mints one; `createApiAuthFetch` attaches one automatically for non-GET methods). Presenting the same `jti` twice inside the freshness window is a `409` — the first attempt may have landed, so re-read state rather than retrying, and mint a NEW `jti` for a genuine retry.
+         */
+        post: operations["posts.createPost"];
         delete?: never;
         options?: never;
         head?: never;
@@ -82,7 +92,57 @@ export interface paths {
         get: operations["posts.getPost"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete a post
+         * @description Delete one of the granting user's OWN posts.
+         *
+         *     OWN CONTENT ONLY — deleting another member's post is moderation, and this tier does not reach it even for an admin. Requires `write:posts` covering this space under the delegated profile, or a bare identity proof.
+         *
+         *     Every write requires a per-request `jti` in the proof (`generateJti()` in the DFOS client mints one; `createApiAuthFetch` attaches one automatically for non-GET methods). Presenting the same `jti` twice inside the freshness window is a `409` — the first attempt may have landed, so re-read state rather than retrying, and mint a NEW `jti` for a genuine retry.
+         */
+        delete: operations["posts.deletePost"];
+        options?: never;
+        head?: never;
+        /**
+         * Edit a post
+         * @description Edit one of the granting user's OWN posts. Send at least one of `title`, `body`, or `topic`; anything you omit is left alone.
+         *
+         *     OWN CONTENT ONLY, and that is narrower than the app: a space admin editing somebody else's post is a moderation act, and this tier does not reach it. Editing a post the user did not write is a 403 even when their role in the space would allow it in the DFOS app.
+         *
+         *     Requires `write:posts` covering this space under the delegated profile, or a bare identity proof. A post that does not exist, sits in another space, or lives in a topic the user cannot reach is the same 404.
+         *
+         *     Every write requires a per-request `jti` in the proof (`generateJti()` in the DFOS client mints one; `createApiAuthFetch` attaches one automatically for non-GET methods). Presenting the same `jti` twice inside the freshness window is a `409` — the first attempt may have landed, so re-read state rather than retrying, and mint a NEW `jti` for a genuine retry.
+         */
+        patch: operations["posts.editPost"];
+        trace?: never;
+    };
+    "/spaces/{space}/posts/{postId}/upvote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Upvote a post
+         * @description Add the granting user's upvote to a post. IDEMPOTENT: upvoting a post they have already upvoted succeeds and returns the same state, so a client may safely re-send.
+         *
+         *     This writes the user's name onto a signal other members can see. Requires `write:upvotes` covering this space under the delegated profile, or a bare identity proof.
+         *
+         *     Every write requires a per-request `jti` in the proof (`generateJti()` in the DFOS client mints one; `createApiAuthFetch` attaches one automatically for non-GET methods). Presenting the same `jti` twice inside the freshness window is a `409` — the first attempt may have landed, so re-read state rather than retrying, and mint a NEW `jti` for a genuine retry.
+         */
+        put: operations["posts.upvotePost"];
+        post?: never;
+        /**
+         * Remove a post upvote
+         * @description Remove the granting user's upvote from a post. IDEMPOTENT: removing an upvote that is not there succeeds and returns the same state.
+         *
+         *     Requires `write:upvotes` covering this space under the delegated profile, or a bare identity proof.
+         *
+         *     Every write requires a per-request `jti` in the proof (`generateJti()` in the DFOS client mints one; `createApiAuthFetch` attaches one automatically for non-GET methods). Presenting the same `jti` twice inside the freshness window is a `409` — the first attempt may have landed, so re-read state rather than retrying, and mint a NEW `jti` for a genuine retry.
+         */
+        delete: operations["posts.removePostUpvote"];
         options?: never;
         head?: never;
         patch?: never;
@@ -105,8 +165,84 @@ export interface paths {
          */
         get: operations["comments.listPostComments"];
         put?: never;
-        post?: never;
+        /**
+         * Write a comment
+         * @description Write a comment on a post, as the granting user. Pass `parentCommentId` to reply to an existing comment instead of commenting on the post itself — threads are one level deep, so a reply to a reply attaches to the same root.
+         *
+         *     Text only: there is no way to attach media to a comment on this API. The parent post's visibility gate and the topic's `comment:create` permission are enforced by the same engine the DFOS app writes through, so a post the user cannot read is the same 404 the read routes give.
+         *
+         *     Requires `write:comments` covering this space under the delegated profile, or a bare identity proof.
+         *
+         *     Every write requires a per-request `jti` in the proof (`generateJti()` in the DFOS client mints one; `createApiAuthFetch` attaches one automatically for non-GET methods). Presenting the same `jti` twice inside the freshness window is a `409` — the first attempt may have landed, so re-read state rather than retrying, and mint a NEW `jti` for a genuine retry.
+         */
+        post: operations["comments.createComment"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/spaces/{space}/comments/{commentId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete a comment
+         * @description Delete one of the granting user's OWN comments. Replies to it are not deleted with it.
+         *
+         *     OWN CONTENT ONLY — deleting another member's comment is moderation, which this tier does not reach. Requires `write:comments` covering this space under the delegated profile, or a bare identity proof.
+         *
+         *     Every write requires a per-request `jti` in the proof (`generateJti()` in the DFOS client mints one; `createApiAuthFetch` attaches one automatically for non-GET methods). Presenting the same `jti` twice inside the freshness window is a `409` — the first attempt may have landed, so re-read state rather than retrying, and mint a NEW `jti` for a genuine retry.
+         */
+        delete: operations["comments.deleteComment"];
+        options?: never;
+        head?: never;
+        /**
+         * Edit a comment
+         * @description Edit one of the granting user's OWN comments.
+         *
+         *     OWN CONTENT ONLY, and narrower than the app: editing another member's comment is not something this tier can do for anybody, whatever their role in the space.
+         *
+         *     Requires `write:comments` covering this space under the delegated profile, or a bare identity proof. A comment that does not exist, sits in another space, or hangs off a post the user cannot read is the same 404.
+         *
+         *     Every write requires a per-request `jti` in the proof (`generateJti()` in the DFOS client mints one; `createApiAuthFetch` attaches one automatically for non-GET methods). Presenting the same `jti` twice inside the freshness window is a `409` — the first attempt may have landed, so re-read state rather than retrying, and mint a NEW `jti` for a genuine retry.
+         */
+        patch: operations["comments.editComment"];
+        trace?: never;
+    };
+    "/spaces/{space}/comments/{commentId}/upvote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Upvote a comment
+         * @description Add the granting user's upvote to a comment. IDEMPOTENT: upvoting one they have already upvoted succeeds and returns the same state.
+         *
+         *     Requires `write:upvotes` covering this space under the delegated profile, or a bare identity proof.
+         *
+         *     Every write requires a per-request `jti` in the proof (`generateJti()` in the DFOS client mints one; `createApiAuthFetch` attaches one automatically for non-GET methods). Presenting the same `jti` twice inside the freshness window is a `409` — the first attempt may have landed, so re-read state rather than retrying, and mint a NEW `jti` for a genuine retry.
+         */
+        put: operations["comments.upvoteComment"];
+        post?: never;
+        /**
+         * Remove a comment upvote
+         * @description Remove the granting user's upvote from a comment. IDEMPOTENT: removing one that is not there succeeds and returns the same state.
+         *
+         *     Requires `write:upvotes` covering this space under the delegated profile, or a bare identity proof.
+         *
+         *     Every write requires a per-request `jti` in the proof (`generateJti()` in the DFOS client mints one; `createApiAuthFetch` attaches one automatically for non-GET methods). Presenting the same `jti` twice inside the freshness window is a `409` — the first attempt may have landed, so re-read state rather than retrying, and mint a NEW `jti` for a genuine retry.
+         */
+        delete: operations["comments.removeCommentUpvote"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1184,6 +1320,51 @@ export interface components {
             previousCursor?: string | null;
             /** @description Total count of matching items (null if not computed). Optional — may be omitted entirely; clients must not depend on its presence. */
             totalCount?: number | null;
+        };
+        /** @description A comment, as returned by a write */
+        PublicCommentWriteOutput: {
+            /**
+             * @description Comment ID. Pass it back as `parentCommentId` to walk its replies.
+             * @example post_6encc4akrze2ah9kntzd9t
+             */
+            id: string;
+            /** @description The ROOT post this comment belongs to — the same id the route was called with. */
+            postId: string;
+            /** @description The comment this one replies to. Absent on a root comment. */
+            parentCommentId?: string;
+            /** @description Comment author */
+            author: components["schemas"]["PublicAuthorOutput"] | null;
+            /** @description Comment body (markdown) */
+            body: string | null;
+            /**
+             * Format: date-time
+             * @description When the comment was published (ISO 8601 UTC)
+             */
+            publishedAt: string;
+            /** @description Number of upvotes on the comment */
+            upvoteCount: number;
+            /** @description Number of replies to this comment. Always 0 on a reply. */
+            replyCount: number;
+            /** @description The authenticated caller's own relationship to this comment. This route is always authenticated, so the block is always present. */
+            viewer?: {
+                /** @description Whether the authenticated caller has upvoted this comment. */
+                upvoted: boolean;
+            };
+        };
+        /** @description Upvote state after a toggle */
+        PublicUpvoteStateOutput: {
+            /** @description Whether the granting user's upvote is on AFTER this call. `PUT` answers `true` and `DELETE` answers `false`, including when the call changed nothing. */
+            upvoted: boolean;
+            /** @description Upvote count on the post or comment after this call */
+            upvoteCount: number;
+        };
+        /** @description Confirmation that the content was deleted */
+        PublicDeletedOutput: {
+            /**
+             * @description Always `true`. A failed delete is an error status, never this body.
+             * @constant
+             */
+            deleted: true;
         };
         /** @description A page in a space public page list */
         PublicPageSummaryOutput: {
@@ -2589,6 +2770,284 @@ export interface operations {
             };
         };
     };
+    "posts.createPost": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                space: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /**
+                     * @description Topic ID to post into, from `GET /spaces/{space}/topics`. Required — this API never picks a topic for you, because which room a post lands in is a decision the writer makes.
+                     * @example topic_6encc4akrze2ah9kntzd9t
+                     */
+                    topic: string;
+                    /**
+                     * @description Post title. Its presence is what makes this a `long-post`; omit it for a `short-post`.
+                     * @example Building a more generous internet
+                     */
+                    title?: string;
+                    /** @description Post body (markdown) */
+                    body: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicPostOutput"];
+                };
+            };
+            /** @description 400 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_INVALID_REQUEST";
+                        /** @constant */
+                        status: 400;
+                        /** @default The request could not be acted on as sent: an edit that names nothing to change, a body that fails validation, or a field this API does not serve (request bodies are closed, so an unknown member is refused rather than ignored). */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 401 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_AUTHENTICATION_FAILED";
+                        /** @constant */
+                        status: 401;
+                        /** @default The DFOS request proof was missing, malformed, stale, or did not verify. Sign a fresh proof over this exact method, host, path, and body. Branch on this status and body: responses normally also carry a `WWW-Authenticate: DFOS` challenge header, but that header is best-effort and may arrive remapped, so it must not be the thing a client keys on. */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 403 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_UNAUTHORIZED";
+                        /** @constant */
+                        status: 403;
+                        /** @default The request proof verified but the credential does not authorize this request — it is expired, revoked, not issued by this platform, or its attenuation does not cover this action on this host. */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 404 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_NOT_FOUND";
+                        /** @constant */
+                        status: 404;
+                        /** @default Not found. A missing space and a non-public (private) one return a byte-identical 404 by design — the two are deliberately indistinguishable (no existence leak). */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 409 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_CONFLICT";
+                        /** @constant */
+                        status: 409;
+                        /** @default This request was already seen — its `jti` was spent inside the proof freshness window. The earlier attempt may have succeeded, so re-read state instead of retrying. A genuine retry must carry a NEW `jti`. */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 413 */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_INVALID_REQUEST";
+                        /** @constant */
+                        status: 413;
+                        /** @default The request body exceeds the maximum this endpoint will authenticate. A proof binds the body it was signed over, so an unhashable body cannot be authenticated at any size — the cap is refused before the signature is checked, not after. */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 415 */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_INVALID_REQUEST";
+                        /** @constant */
+                        status: 415;
+                        /** @default Unsupported media type. A request body must be `application/json` (optionally `; charset=utf-8`), and must not carry a `Content-Encoding` other than `identity` — a proof binds the raw request octets, and this API does not reverse an encoding before checking that binding. */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 429 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_RATE_LIMITED";
+                        /** @constant */
+                        status: 429;
+                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
+                        message: string;
+                        data: {
+                            /** @description Which per-IP budget was exhausted */
+                            scope: string;
+                            /** @description Milliseconds to wait before retrying */
+                            retryAfterMs: number;
+                        };
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 503 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_SERVICE_UNAVAILABLE";
+                        /** @constant */
+                        status: 503;
+                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+        };
+    };
     "posts.getPost": {
         parameters: {
             query?: never;
@@ -2624,6 +3083,1068 @@ export interface operations {
                         /** @constant */
                         status: 404;
                         /** @default Not found. A missing space and a non-public (private) one return a byte-identical 404 by design — the two are deliberately indistinguishable (no existence leak). */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 429 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_RATE_LIMITED";
+                        /** @constant */
+                        status: 429;
+                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
+                        message: string;
+                        data: {
+                            /** @description Which per-IP budget was exhausted */
+                            scope: string;
+                            /** @description Milliseconds to wait before retrying */
+                            retryAfterMs: number;
+                        };
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 503 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_SERVICE_UNAVAILABLE";
+                        /** @constant */
+                        status: 503;
+                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+        };
+    };
+    "posts.deletePost": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                space: string;
+                postId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicDeletedOutput"];
+                };
+            };
+            /** @description 400 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_INVALID_REQUEST";
+                        /** @constant */
+                        status: 400;
+                        /** @default The request could not be acted on as sent: an edit that names nothing to change, a body that fails validation, or a field this API does not serve (request bodies are closed, so an unknown member is refused rather than ignored). */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 401 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_AUTHENTICATION_FAILED";
+                        /** @constant */
+                        status: 401;
+                        /** @default The DFOS request proof was missing, malformed, stale, or did not verify. Sign a fresh proof over this exact method, host, path, and body. Branch on this status and body: responses normally also carry a `WWW-Authenticate: DFOS` challenge header, but that header is best-effort and may arrive remapped, so it must not be the thing a client keys on. */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 403 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_UNAUTHORIZED";
+                        /** @constant */
+                        status: 403;
+                        /** @default The request proof verified but the credential does not authorize this request — it is expired, revoked, not issued by this platform, or its attenuation does not cover this action on this host. */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 404 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_NOT_FOUND";
+                        /** @constant */
+                        status: 404;
+                        /** @default Not found. A missing space and a non-public (private) one return a byte-identical 404 by design — the two are deliberately indistinguishable (no existence leak). */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 409 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_CONFLICT";
+                        /** @constant */
+                        status: 409;
+                        /** @default This request was already seen — its `jti` was spent inside the proof freshness window. The earlier attempt may have succeeded, so re-read state instead of retrying. A genuine retry must carry a NEW `jti`. */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 413 */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_INVALID_REQUEST";
+                        /** @constant */
+                        status: 413;
+                        /** @default The request body exceeds the maximum this endpoint will authenticate. A proof binds the body it was signed over, so an unhashable body cannot be authenticated at any size — the cap is refused before the signature is checked, not after. */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 415 */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_INVALID_REQUEST";
+                        /** @constant */
+                        status: 415;
+                        /** @default Unsupported media type. A request body must be `application/json` (optionally `; charset=utf-8`), and must not carry a `Content-Encoding` other than `identity` — a proof binds the raw request octets, and this API does not reverse an encoding before checking that binding. */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 429 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_RATE_LIMITED";
+                        /** @constant */
+                        status: 429;
+                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
+                        message: string;
+                        data: {
+                            /** @description Which per-IP budget was exhausted */
+                            scope: string;
+                            /** @description Milliseconds to wait before retrying */
+                            retryAfterMs: number;
+                        };
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 503 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_SERVICE_UNAVAILABLE";
+                        /** @constant */
+                        status: 503;
+                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+        };
+    };
+    "posts.editPost": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                space: string;
+                postId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @description Replacement title */
+                    title?: string;
+                    /** @description Replacement body (markdown) */
+                    body?: string;
+                    /**
+                     * @description Move the post to this topic ID, within the same space.
+                     * @example topic_6encc4akrze2ah9kntzd9t
+                     */
+                    topic?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicPostOutput"];
+                };
+            };
+            /** @description 400 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_INVALID_REQUEST";
+                        /** @constant */
+                        status: 400;
+                        /** @default The request could not be acted on as sent: an edit that names nothing to change, a body that fails validation, or a field this API does not serve (request bodies are closed, so an unknown member is refused rather than ignored). */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 401 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_AUTHENTICATION_FAILED";
+                        /** @constant */
+                        status: 401;
+                        /** @default The DFOS request proof was missing, malformed, stale, or did not verify. Sign a fresh proof over this exact method, host, path, and body. Branch on this status and body: responses normally also carry a `WWW-Authenticate: DFOS` challenge header, but that header is best-effort and may arrive remapped, so it must not be the thing a client keys on. */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 403 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_UNAUTHORIZED";
+                        /** @constant */
+                        status: 403;
+                        /** @default The request proof verified but the credential does not authorize this request — it is expired, revoked, not issued by this platform, or its attenuation does not cover this action on this host. */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 404 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_NOT_FOUND";
+                        /** @constant */
+                        status: 404;
+                        /** @default Not found. A missing space and a non-public (private) one return a byte-identical 404 by design — the two are deliberately indistinguishable (no existence leak). */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 409 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_CONFLICT";
+                        /** @constant */
+                        status: 409;
+                        /** @default This request was already seen — its `jti` was spent inside the proof freshness window. The earlier attempt may have succeeded, so re-read state instead of retrying. A genuine retry must carry a NEW `jti`. */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 413 */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_INVALID_REQUEST";
+                        /** @constant */
+                        status: 413;
+                        /** @default The request body exceeds the maximum this endpoint will authenticate. A proof binds the body it was signed over, so an unhashable body cannot be authenticated at any size — the cap is refused before the signature is checked, not after. */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 415 */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_INVALID_REQUEST";
+                        /** @constant */
+                        status: 415;
+                        /** @default Unsupported media type. A request body must be `application/json` (optionally `; charset=utf-8`), and must not carry a `Content-Encoding` other than `identity` — a proof binds the raw request octets, and this API does not reverse an encoding before checking that binding. */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 429 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_RATE_LIMITED";
+                        /** @constant */
+                        status: 429;
+                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
+                        message: string;
+                        data: {
+                            /** @description Which per-IP budget was exhausted */
+                            scope: string;
+                            /** @description Milliseconds to wait before retrying */
+                            retryAfterMs: number;
+                        };
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 503 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_SERVICE_UNAVAILABLE";
+                        /** @constant */
+                        status: 503;
+                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+        };
+    };
+    "posts.upvotePost": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                space: string;
+                postId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicUpvoteStateOutput"];
+                };
+            };
+            /** @description 400 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_INVALID_REQUEST";
+                        /** @constant */
+                        status: 400;
+                        /** @default The request could not be acted on as sent: an edit that names nothing to change, a body that fails validation, or a field this API does not serve (request bodies are closed, so an unknown member is refused rather than ignored). */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 401 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_AUTHENTICATION_FAILED";
+                        /** @constant */
+                        status: 401;
+                        /** @default The DFOS request proof was missing, malformed, stale, or did not verify. Sign a fresh proof over this exact method, host, path, and body. Branch on this status and body: responses normally also carry a `WWW-Authenticate: DFOS` challenge header, but that header is best-effort and may arrive remapped, so it must not be the thing a client keys on. */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 403 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_UNAUTHORIZED";
+                        /** @constant */
+                        status: 403;
+                        /** @default The request proof verified but the credential does not authorize this request — it is expired, revoked, not issued by this platform, or its attenuation does not cover this action on this host. */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 404 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_NOT_FOUND";
+                        /** @constant */
+                        status: 404;
+                        /** @default Not found. A missing space and a non-public (private) one return a byte-identical 404 by design — the two are deliberately indistinguishable (no existence leak). */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 409 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_CONFLICT";
+                        /** @constant */
+                        status: 409;
+                        /** @default This request was already seen — its `jti` was spent inside the proof freshness window. The earlier attempt may have succeeded, so re-read state instead of retrying. A genuine retry must carry a NEW `jti`. */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 413 */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_INVALID_REQUEST";
+                        /** @constant */
+                        status: 413;
+                        /** @default The request body exceeds the maximum this endpoint will authenticate. A proof binds the body it was signed over, so an unhashable body cannot be authenticated at any size — the cap is refused before the signature is checked, not after. */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 415 */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_INVALID_REQUEST";
+                        /** @constant */
+                        status: 415;
+                        /** @default Unsupported media type. A request body must be `application/json` (optionally `; charset=utf-8`), and must not carry a `Content-Encoding` other than `identity` — a proof binds the raw request octets, and this API does not reverse an encoding before checking that binding. */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 429 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_RATE_LIMITED";
+                        /** @constant */
+                        status: 429;
+                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
+                        message: string;
+                        data: {
+                            /** @description Which per-IP budget was exhausted */
+                            scope: string;
+                            /** @description Milliseconds to wait before retrying */
+                            retryAfterMs: number;
+                        };
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 503 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_SERVICE_UNAVAILABLE";
+                        /** @constant */
+                        status: 503;
+                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+        };
+    };
+    "posts.removePostUpvote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                space: string;
+                postId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicUpvoteStateOutput"];
+                };
+            };
+            /** @description 400 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_INVALID_REQUEST";
+                        /** @constant */
+                        status: 400;
+                        /** @default The request could not be acted on as sent: an edit that names nothing to change, a body that fails validation, or a field this API does not serve (request bodies are closed, so an unknown member is refused rather than ignored). */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 401 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_AUTHENTICATION_FAILED";
+                        /** @constant */
+                        status: 401;
+                        /** @default The DFOS request proof was missing, malformed, stale, or did not verify. Sign a fresh proof over this exact method, host, path, and body. Branch on this status and body: responses normally also carry a `WWW-Authenticate: DFOS` challenge header, but that header is best-effort and may arrive remapped, so it must not be the thing a client keys on. */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 403 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_UNAUTHORIZED";
+                        /** @constant */
+                        status: 403;
+                        /** @default The request proof verified but the credential does not authorize this request — it is expired, revoked, not issued by this platform, or its attenuation does not cover this action on this host. */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 404 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_NOT_FOUND";
+                        /** @constant */
+                        status: 404;
+                        /** @default Not found. A missing space and a non-public (private) one return a byte-identical 404 by design — the two are deliberately indistinguishable (no existence leak). */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 409 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_CONFLICT";
+                        /** @constant */
+                        status: 409;
+                        /** @default This request was already seen — its `jti` was spent inside the proof freshness window. The earlier attempt may have succeeded, so re-read state instead of retrying. A genuine retry must carry a NEW `jti`. */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 413 */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_INVALID_REQUEST";
+                        /** @constant */
+                        status: 413;
+                        /** @default The request body exceeds the maximum this endpoint will authenticate. A proof binds the body it was signed over, so an unhashable body cannot be authenticated at any size — the cap is refused before the signature is checked, not after. */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 415 */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_INVALID_REQUEST";
+                        /** @constant */
+                        status: 415;
+                        /** @default Unsupported media type. A request body must be `application/json` (optionally `; charset=utf-8`), and must not carry a `Content-Encoding` other than `identity` — a proof binds the raw request octets, and this API does not reverse an encoding before checking that binding. */
                         message: string;
                         data?: unknown;
                     } | {
@@ -2736,6 +4257,1335 @@ export interface operations {
                         /** @constant */
                         status: 404;
                         /** @default Not found. A missing space and a non-public (private) one return a byte-identical 404 by design — the two are deliberately indistinguishable (no existence leak). */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 429 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_RATE_LIMITED";
+                        /** @constant */
+                        status: 429;
+                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
+                        message: string;
+                        data: {
+                            /** @description Which per-IP budget was exhausted */
+                            scope: string;
+                            /** @description Milliseconds to wait before retrying */
+                            retryAfterMs: number;
+                        };
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 503 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_SERVICE_UNAVAILABLE";
+                        /** @constant */
+                        status: 503;
+                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+        };
+    };
+    "comments.createComment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                space: string;
+                postId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Comment body (markdown) */
+                    body: string;
+                    /**
+                     * @description Reply to this comment rather than to the post. Must be a comment on the same root post.
+                     * @example post_6encc4akrze2ah9kntzd9t
+                     */
+                    parentCommentId?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicCommentWriteOutput"];
+                };
+            };
+            /** @description 400 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_INVALID_REQUEST";
+                        /** @constant */
+                        status: 400;
+                        /** @default The request could not be acted on as sent: an edit that names nothing to change, a body that fails validation, or a field this API does not serve (request bodies are closed, so an unknown member is refused rather than ignored). */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 401 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_AUTHENTICATION_FAILED";
+                        /** @constant */
+                        status: 401;
+                        /** @default The DFOS request proof was missing, malformed, stale, or did not verify. Sign a fresh proof over this exact method, host, path, and body. Branch on this status and body: responses normally also carry a `WWW-Authenticate: DFOS` challenge header, but that header is best-effort and may arrive remapped, so it must not be the thing a client keys on. */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 403 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_UNAUTHORIZED";
+                        /** @constant */
+                        status: 403;
+                        /** @default The request proof verified but the credential does not authorize this request — it is expired, revoked, not issued by this platform, or its attenuation does not cover this action on this host. */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 404 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_NOT_FOUND";
+                        /** @constant */
+                        status: 404;
+                        /** @default Not found. A missing space and a non-public (private) one return a byte-identical 404 by design — the two are deliberately indistinguishable (no existence leak). */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 409 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_CONFLICT";
+                        /** @constant */
+                        status: 409;
+                        /** @default This request was already seen — its `jti` was spent inside the proof freshness window. The earlier attempt may have succeeded, so re-read state instead of retrying. A genuine retry must carry a NEW `jti`. */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 413 */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_INVALID_REQUEST";
+                        /** @constant */
+                        status: 413;
+                        /** @default The request body exceeds the maximum this endpoint will authenticate. A proof binds the body it was signed over, so an unhashable body cannot be authenticated at any size — the cap is refused before the signature is checked, not after. */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 415 */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_INVALID_REQUEST";
+                        /** @constant */
+                        status: 415;
+                        /** @default Unsupported media type. A request body must be `application/json` (optionally `; charset=utf-8`), and must not carry a `Content-Encoding` other than `identity` — a proof binds the raw request octets, and this API does not reverse an encoding before checking that binding. */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 429 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_RATE_LIMITED";
+                        /** @constant */
+                        status: 429;
+                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
+                        message: string;
+                        data: {
+                            /** @description Which per-IP budget was exhausted */
+                            scope: string;
+                            /** @description Milliseconds to wait before retrying */
+                            retryAfterMs: number;
+                        };
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 503 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_SERVICE_UNAVAILABLE";
+                        /** @constant */
+                        status: 503;
+                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+        };
+    };
+    "comments.deleteComment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                space: string;
+                commentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicDeletedOutput"];
+                };
+            };
+            /** @description 400 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_INVALID_REQUEST";
+                        /** @constant */
+                        status: 400;
+                        /** @default The request could not be acted on as sent: an edit that names nothing to change, a body that fails validation, or a field this API does not serve (request bodies are closed, so an unknown member is refused rather than ignored). */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 401 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_AUTHENTICATION_FAILED";
+                        /** @constant */
+                        status: 401;
+                        /** @default The DFOS request proof was missing, malformed, stale, or did not verify. Sign a fresh proof over this exact method, host, path, and body. Branch on this status and body: responses normally also carry a `WWW-Authenticate: DFOS` challenge header, but that header is best-effort and may arrive remapped, so it must not be the thing a client keys on. */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 403 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_UNAUTHORIZED";
+                        /** @constant */
+                        status: 403;
+                        /** @default The request proof verified but the credential does not authorize this request — it is expired, revoked, not issued by this platform, or its attenuation does not cover this action on this host. */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 404 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_NOT_FOUND";
+                        /** @constant */
+                        status: 404;
+                        /** @default Not found. A missing space and a non-public (private) one return a byte-identical 404 by design — the two are deliberately indistinguishable (no existence leak). */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 409 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_CONFLICT";
+                        /** @constant */
+                        status: 409;
+                        /** @default This request was already seen — its `jti` was spent inside the proof freshness window. The earlier attempt may have succeeded, so re-read state instead of retrying. A genuine retry must carry a NEW `jti`. */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 413 */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_INVALID_REQUEST";
+                        /** @constant */
+                        status: 413;
+                        /** @default The request body exceeds the maximum this endpoint will authenticate. A proof binds the body it was signed over, so an unhashable body cannot be authenticated at any size — the cap is refused before the signature is checked, not after. */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 415 */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_INVALID_REQUEST";
+                        /** @constant */
+                        status: 415;
+                        /** @default Unsupported media type. A request body must be `application/json` (optionally `; charset=utf-8`), and must not carry a `Content-Encoding` other than `identity` — a proof binds the raw request octets, and this API does not reverse an encoding before checking that binding. */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 429 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_RATE_LIMITED";
+                        /** @constant */
+                        status: 429;
+                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
+                        message: string;
+                        data: {
+                            /** @description Which per-IP budget was exhausted */
+                            scope: string;
+                            /** @description Milliseconds to wait before retrying */
+                            retryAfterMs: number;
+                        };
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 503 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_SERVICE_UNAVAILABLE";
+                        /** @constant */
+                        status: 503;
+                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+        };
+    };
+    "comments.editComment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                space: string;
+                commentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Replacement body (markdown) */
+                    body: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicCommentWriteOutput"];
+                };
+            };
+            /** @description 400 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_INVALID_REQUEST";
+                        /** @constant */
+                        status: 400;
+                        /** @default The request could not be acted on as sent: an edit that names nothing to change, a body that fails validation, or a field this API does not serve (request bodies are closed, so an unknown member is refused rather than ignored). */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 401 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_AUTHENTICATION_FAILED";
+                        /** @constant */
+                        status: 401;
+                        /** @default The DFOS request proof was missing, malformed, stale, or did not verify. Sign a fresh proof over this exact method, host, path, and body. Branch on this status and body: responses normally also carry a `WWW-Authenticate: DFOS` challenge header, but that header is best-effort and may arrive remapped, so it must not be the thing a client keys on. */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 403 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_UNAUTHORIZED";
+                        /** @constant */
+                        status: 403;
+                        /** @default The request proof verified but the credential does not authorize this request — it is expired, revoked, not issued by this platform, or its attenuation does not cover this action on this host. */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 404 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_NOT_FOUND";
+                        /** @constant */
+                        status: 404;
+                        /** @default Not found. A missing space and a non-public (private) one return a byte-identical 404 by design — the two are deliberately indistinguishable (no existence leak). */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 409 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_CONFLICT";
+                        /** @constant */
+                        status: 409;
+                        /** @default This request was already seen — its `jti` was spent inside the proof freshness window. The earlier attempt may have succeeded, so re-read state instead of retrying. A genuine retry must carry a NEW `jti`. */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 413 */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_INVALID_REQUEST";
+                        /** @constant */
+                        status: 413;
+                        /** @default The request body exceeds the maximum this endpoint will authenticate. A proof binds the body it was signed over, so an unhashable body cannot be authenticated at any size — the cap is refused before the signature is checked, not after. */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 415 */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_INVALID_REQUEST";
+                        /** @constant */
+                        status: 415;
+                        /** @default Unsupported media type. A request body must be `application/json` (optionally `; charset=utf-8`), and must not carry a `Content-Encoding` other than `identity` — a proof binds the raw request octets, and this API does not reverse an encoding before checking that binding. */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 429 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_RATE_LIMITED";
+                        /** @constant */
+                        status: 429;
+                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
+                        message: string;
+                        data: {
+                            /** @description Which per-IP budget was exhausted */
+                            scope: string;
+                            /** @description Milliseconds to wait before retrying */
+                            retryAfterMs: number;
+                        };
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 503 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_SERVICE_UNAVAILABLE";
+                        /** @constant */
+                        status: 503;
+                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+        };
+    };
+    "comments.upvoteComment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                space: string;
+                commentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicUpvoteStateOutput"];
+                };
+            };
+            /** @description 400 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_INVALID_REQUEST";
+                        /** @constant */
+                        status: 400;
+                        /** @default The request could not be acted on as sent: an edit that names nothing to change, a body that fails validation, or a field this API does not serve (request bodies are closed, so an unknown member is refused rather than ignored). */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 401 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_AUTHENTICATION_FAILED";
+                        /** @constant */
+                        status: 401;
+                        /** @default The DFOS request proof was missing, malformed, stale, or did not verify. Sign a fresh proof over this exact method, host, path, and body. Branch on this status and body: responses normally also carry a `WWW-Authenticate: DFOS` challenge header, but that header is best-effort and may arrive remapped, so it must not be the thing a client keys on. */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 403 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_UNAUTHORIZED";
+                        /** @constant */
+                        status: 403;
+                        /** @default The request proof verified but the credential does not authorize this request — it is expired, revoked, not issued by this platform, or its attenuation does not cover this action on this host. */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 404 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_NOT_FOUND";
+                        /** @constant */
+                        status: 404;
+                        /** @default Not found. A missing space and a non-public (private) one return a byte-identical 404 by design — the two are deliberately indistinguishable (no existence leak). */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 409 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_CONFLICT";
+                        /** @constant */
+                        status: 409;
+                        /** @default This request was already seen — its `jti` was spent inside the proof freshness window. The earlier attempt may have succeeded, so re-read state instead of retrying. A genuine retry must carry a NEW `jti`. */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 413 */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_INVALID_REQUEST";
+                        /** @constant */
+                        status: 413;
+                        /** @default The request body exceeds the maximum this endpoint will authenticate. A proof binds the body it was signed over, so an unhashable body cannot be authenticated at any size — the cap is refused before the signature is checked, not after. */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 415 */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_INVALID_REQUEST";
+                        /** @constant */
+                        status: 415;
+                        /** @default Unsupported media type. A request body must be `application/json` (optionally `; charset=utf-8`), and must not carry a `Content-Encoding` other than `identity` — a proof binds the raw request octets, and this API does not reverse an encoding before checking that binding. */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 429 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_RATE_LIMITED";
+                        /** @constant */
+                        status: 429;
+                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
+                        message: string;
+                        data: {
+                            /** @description Which per-IP budget was exhausted */
+                            scope: string;
+                            /** @description Milliseconds to wait before retrying */
+                            retryAfterMs: number;
+                        };
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 503 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_SERVICE_UNAVAILABLE";
+                        /** @constant */
+                        status: 503;
+                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+        };
+    };
+    "comments.removeCommentUpvote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                space: string;
+                commentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicUpvoteStateOutput"];
+                };
+            };
+            /** @description 400 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_INVALID_REQUEST";
+                        /** @constant */
+                        status: 400;
+                        /** @default The request could not be acted on as sent: an edit that names nothing to change, a body that fails validation, or a field this API does not serve (request bodies are closed, so an unknown member is refused rather than ignored). */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 401 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_AUTHENTICATION_FAILED";
+                        /** @constant */
+                        status: 401;
+                        /** @default The DFOS request proof was missing, malformed, stale, or did not verify. Sign a fresh proof over this exact method, host, path, and body. Branch on this status and body: responses normally also carry a `WWW-Authenticate: DFOS` challenge header, but that header is best-effort and may arrive remapped, so it must not be the thing a client keys on. */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 403 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_UNAUTHORIZED";
+                        /** @constant */
+                        status: 403;
+                        /** @default The request proof verified but the credential does not authorize this request — it is expired, revoked, not issued by this platform, or its attenuation does not cover this action on this host. */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 404 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_NOT_FOUND";
+                        /** @constant */
+                        status: 404;
+                        /** @default Not found. A missing space and a non-public (private) one return a byte-identical 404 by design — the two are deliberately indistinguishable (no existence leak). */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 409 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_CONFLICT";
+                        /** @constant */
+                        status: 409;
+                        /** @default This request was already seen — its `jti` was spent inside the proof freshness window. The earlier attempt may have succeeded, so re-read state instead of retrying. A genuine retry must carry a NEW `jti`. */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 413 */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_INVALID_REQUEST";
+                        /** @constant */
+                        status: 413;
+                        /** @default The request body exceeds the maximum this endpoint will authenticate. A proof binds the body it was signed over, so an unhashable body cannot be authenticated at any size — the cap is refused before the signature is checked, not after. */
+                        message: string;
+                        data?: unknown;
+                    } | {
+                        /** @constant */
+                        defined: false;
+                        code: string;
+                        status: number;
+                        message: string;
+                        data?: unknown;
+                    };
+                };
+            };
+            /** @description 415 */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        defined: true;
+                        /** @constant */
+                        code: "E_INVALID_REQUEST";
+                        /** @constant */
+                        status: 415;
+                        /** @default Unsupported media type. A request body must be `application/json` (optionally `; charset=utf-8`), and must not carry a `Content-Encoding` other than `identity` — a proof binds the raw request octets, and this API does not reverse an encoding before checking that binding. */
                         message: string;
                         data?: unknown;
                     } | {
