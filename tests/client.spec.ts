@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-
 import { createDfosApi } from '../src/index.js';
 
 /**

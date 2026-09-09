@@ -50,10 +50,10 @@ else — one of the two is always set.
 
 Options:
 
-| Option    | Default                    | What it does                                         |
-| --------- | -------------------------- | ---------------------------------------------------- |
-| `baseUrl` | `https://api.dfos.com/v1`  | Point the client at another deployment.              |
-| `fetch`   | the global `fetch`         | Supply your own fetch (see "Signed requests" below). |
+| Option    | Default                   | What it does                                         |
+| --------- | ------------------------- | ---------------------------------------------------- |
+| `baseUrl` | `https://api.dfos.com/v1` | Point the client at another deployment.              |
+| `fetch`   | the global `fetch`        | Supply your own fetch (see "Signed requests" below). |
 
 Everything else — retries, timeouts, caching — is your fetch's job, not this
 package's.

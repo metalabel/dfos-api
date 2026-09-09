@@ -41,6 +41,8 @@
     "clean": "rm -rf dist",
     "typecheck": "node node_modules/typescript7/bin/tsc --noEmit",
     "test": "vitest run",
+    "format": "prettier --write .",
+    "lint": "prettier --check .",
     "generate": "openapi-typescript openapi.json -o src/generated/api.ts",
     "update-spec": "node scripts/update-spec.mjs && pnpm generate",
     "prepublishOnly": "pnpm build"
@@ -57,11 +59,13 @@
     "openapi-fetch": "^0.17.0"
   },
   "devDependencies": {
+    "@ianvs/prettier-plugin-sort-imports": "^4.7.1",
     "@metalabel/dfos-client": "0.54.0",
     "@metalabel/dfos-protocol": "0.54.0",
     "@metalabel/dfos-web-relay": "0.54.0",
     "@types/node": "^24.13.3",
     "openapi-typescript": "^7.10.0",
+    "prettier": "^3.9.6",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3",
     "typescript7": "npm:typescript@7.0.2",

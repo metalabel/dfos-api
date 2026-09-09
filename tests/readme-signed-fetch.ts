@@ -8,7 +8,6 @@
  * stand-ins, and the trailing export.
  */
 import { createApiAuthFetch } from '@metalabel/dfos-client/api-auth';
-
 import { createDfosApi } from '../src/index.js';
 
 declare const credential: string;
