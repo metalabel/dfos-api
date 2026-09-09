@@ -61,7 +61,7 @@ export interface paths {
         put?: never;
         /**
          * Write a post
-         * @description Write a post as the granting user, into a topic they can post in. Text only: `title` makes it a `long-post`. Media, covers, announce, backdating, and view-access overrides are not on this input. An unreachable topic is a 404.
+         * @description Write a post as the granting user, into a topic they can post in. `title` makes it a `long-post`; without one it is a `short-post`, which carries at most 4 attachments and refuses inline images in its body. Covers, announce, backdating, and view-access overrides are not on this input. An unreachable topic is a 404.
          */
         post: operations["posts.createPost"];
         delete?: never;
@@ -95,7 +95,7 @@ export interface paths {
         head?: never;
         /**
          * Edit a post
-         * @description Edit one of the granting user's own posts. Send at least one of `title`, `body`, or `topic`; omitted fields are left alone. Own content only: editing another member's post is a 403 even for a space admin.
+         * @description Edit one of the granting user's own posts. Send at least one of `title`, `body`, `topic`, or `attachments`; omitted fields are left alone. `attachments` REPLACES the whole set, and `[]` clears it. Own content only: editing another member's post is a 403 even for a space admin.
          */
         patch: operations["posts.editPost"];
         trace?: never;
@@ -139,7 +139,7 @@ export interface paths {
         put?: never;
         /**
          * Write a comment
-         * @description Write a comment on a post, or pass `parentCommentId` to reply to an existing comment. Threads are one level deep: a reply to a reply attaches to the same root. Text only — a comment cannot carry media. A post the user cannot read answers the same 404 as one that does not exist.
+         * @description Write a comment on a post, or pass `parentCommentId` to reply to an existing comment. Threads are one level deep: a reply to a reply attaches to the same root. Send a `body`, `attachments`, or both — a comment with neither is a 400, and inline images in the body are refused (attach them instead). A post the user cannot read answers the same 404 as one that does not exist.
          */
         post: operations["comments.createComment"];
         delete?: never;
@@ -167,7 +167,7 @@ export interface paths {
         head?: never;
         /**
          * Edit a comment
-         * @description Replace the body of one of the granting user's own comments. Own content only: this tier cannot edit another member's comment, whatever the caller's role in the space. A comment that does not exist, sits in another space, or hangs off a post the user cannot read is the same 404.
+         * @description Edit one of the granting user's own comments. Send a `body`, `attachments`, or both; each is a full replacement, and `attachments: []` clears the set. An edit naming neither is a 400. Own content only: this tier cannot edit another member's comment, whatever the caller's role in the space. A comment that does not exist, sits in another space, or hangs off a post the user cannot read is the same 404.
          */
         patch: operations["comments.editComment"];
         trace?: never;
@@ -191,6 +191,56 @@ export interface paths {
          * @description Remove the granting user's upvote from a comment. Idempotent: removing an upvote that is not there returns the same state.
          */
         delete: operations["comments.removeCommentUpvote"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/spaces/{space}/media": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start an upload
+         * @description Mint a media placeholder and a presigned S3 `PUT`, then send the bytes there yourself — this API never receives them.
+         *
+         *     Four steps: mint here; `PUT` the file to `upload.url` with BOTH returned headers byte for byte and a body exactly `size` bytes long; poll [`GET /spaces/{space}/media/{mediaId}`](#tag/media) until `uploaded` is `true`; then pass `media.id` in `attachments` on a post or comment write.
+         *
+         *     Finalize is asynchronous: a successful `PUT` returns before DFOS has recorded it, and there is nothing to call to hurry it. The signature dies at `expiresAt` — mint again rather than trying to extend it. An upload that is never attached is reclaimed after 30 days.
+         *
+         *     Images are served from a public CDN; audio, video, and every other kind are private and served through short-lived signed URLs. That classification is the server's and is not on this input.
+         */
+        post: operations["media.createUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/spaces/{space}/media/{mediaId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Check an upload
+         * @description Read one of your own media objects — the only way to learn that an upload finished, since the finalize is an S3 event rather than a response to anything you sent.
+         *
+         *     Poll it after the `PUT` until `uploaded` is `true`; `url` and `contentLength` appear at the same moment. A media id you did not upload, one that does not exist, and one that has been reclaimed are the same 404.
+         *
+         *     This route is signed like a write — it carries a `jti` and is opened by `write:posts` or `write:comments` — because it describes what you uploaded rather than anything the space published.
+         */
+        get: operations["media.getUpload"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -789,6 +839,142 @@ export interface components {
             urlExpiresAt?: string;
             /** @description Amplitude overview for audio — up to 200 integers, each 0–100 */
             waveformPeaks?: number[];
+        };
+        /**
+         * @description A media object you uploaded, with its upload state
+         * @example {
+         *       "id": "media_2t9crk4hf7vz3ea8dn6r2c",
+         *       "filename": "studio-floor.jpg",
+         *       "url": "https://dfos.imgix.net/media/public/2t9crk4hf7vz3ea8dn6r2c-studio-floor.jpg",
+         *       "contentType": "image/jpeg",
+         *       "contentLength": 812446,
+         *       "uploaded": true
+         *     }
+         */
+        PublicOwnMediaOutput: {
+            /** @description Media object id — what an `attachment://<id>` inline body token references. Use it to match a token to its `bodyMedia` entry. */
+            id: string;
+            /** @description Original uploaded filename */
+            filename: string;
+            /** @description MIME type of the media object */
+            contentType: string;
+            /** @description Size in bytes, absent until the upload is finalized */
+            contentLength?: number;
+            /** @description Pixel width (images/video) */
+            width?: number;
+            /** @description Pixel height (images/video) */
+            height?: number;
+            /** @description Blur-hash placeholder string for progressive image loading */
+            blurHash?: string;
+            /** @description Uploader-authored caption or alt text */
+            alt?: string;
+            /** @description Playback length in milliseconds (audio/video only) */
+            durationMs?: number;
+            /** @description CDN URL of an extracted poster frame or cover art (audio/video only) */
+            posterUrl?: string;
+            /** @description Streamable MP4 rendition URL (audio/video only). Permanent for public media; a time-limited signed URL for private media. */
+            playbackUrl?: string;
+            /**
+             * Format: date-time
+             * @description When the signed `url` and `playbackUrl` expire (ISO 8601 UTC). Present only for private media. Signed URLs are ephemeral — re-fetch rather than persisting them.
+             */
+            urlExpiresAt?: string;
+            /** @description Amplitude overview for audio — up to 200 integers, each 0–100 */
+            waveformPeaks?: number[];
+            /** @description Resolved URL for the object. ABSENT until `uploaded` is `true` — there is nothing at the address yet. Permanent for public images; a time-limited signed URL for private media, which also carries `urlExpiresAt`. */
+            url?: string;
+            /** @description `true` once the bytes have been received and finalized. Attach only after this is true. */
+            uploaded: boolean;
+        };
+        /**
+         * @description A minted media placeholder and the presigned upload that fills it
+         * @example {
+         *       "media": {
+         *         "id": "media_2t9crk4hf7vz3ea8dn6r2c",
+         *         "filename": "studio-floor.jpg",
+         *         "contentType": "image/jpeg",
+         *         "uploaded": false
+         *       },
+         *       "upload": {
+         *         "url": "https://dfos-media.s3.us-east-1.amazonaws.com/media/public/2t9crk4hf7vz3ea8dn6r2c-studio-floor.jpg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Expires=3600&X-Amz-SignedHeaders=content-disposition%3Bcontent-length%3Bcontent-type%3Bhost&X-Amz-Signature=fd6d0b5f3a1c47e8b2905d1cb7e4a83f6c02d9418ae7bb35c1d4f0928a6e5b7c",
+         *         "method": "PUT",
+         *         "headers": {
+         *           "Content-Type": "image/jpeg",
+         *           "Content-Disposition": "inline; filename=\"studio-floor.jpg\""
+         *         },
+         *         "expiresAt": "2026-09-08T17:20:00.000Z"
+         *       }
+         *     }
+         */
+        PublicMediaUploadOutput: {
+            /**
+             * @description The placeholder row. `uploaded` is `false` until the bytes land.
+             * @example {
+             *       "id": "media_2t9crk4hf7vz3ea8dn6r2c",
+             *       "filename": "studio-floor.jpg",
+             *       "url": "https://dfos.imgix.net/media/public/2t9crk4hf7vz3ea8dn6r2c-studio-floor.jpg",
+             *       "contentType": "image/jpeg",
+             *       "contentLength": 812446,
+             *       "uploaded": true
+             *     }
+             */
+            media: {
+                /** @description Media object id — what an `attachment://<id>` inline body token references. Use it to match a token to its `bodyMedia` entry. */
+                id: string;
+                /** @description Original uploaded filename */
+                filename: string;
+                /** @description MIME type of the media object */
+                contentType: string;
+                /** @description Size in bytes, absent until the upload is finalized */
+                contentLength?: number;
+                /** @description Pixel width (images/video) */
+                width?: number;
+                /** @description Pixel height (images/video) */
+                height?: number;
+                /** @description Blur-hash placeholder string for progressive image loading */
+                blurHash?: string;
+                /** @description Uploader-authored caption or alt text */
+                alt?: string;
+                /** @description Playback length in milliseconds (audio/video only) */
+                durationMs?: number;
+                /** @description CDN URL of an extracted poster frame or cover art (audio/video only) */
+                posterUrl?: string;
+                /** @description Streamable MP4 rendition URL (audio/video only). Permanent for public media; a time-limited signed URL for private media. */
+                playbackUrl?: string;
+                /**
+                 * Format: date-time
+                 * @description When the signed `url` and `playbackUrl` expire (ISO 8601 UTC). Present only for private media. Signed URLs are ephemeral — re-fetch rather than persisting them.
+                 */
+                urlExpiresAt?: string;
+                /** @description Amplitude overview for audio — up to 200 integers, each 0–100 */
+                waveformPeaks?: number[];
+                /** @description Resolved URL for the object. ABSENT until `uploaded` is `true` — there is nothing at the address yet. Permanent for public images; a time-limited signed URL for private media, which also carries `urlExpiresAt`. */
+                url?: string;
+                /** @description `true` once the bytes have been received and finalized. Attach only after this is true. */
+                uploaded: boolean;
+            };
+            /** @description The request that puts the bytes in place. */
+            upload: {
+                /** @description Presigned S3 URL. Send the bytes here yourself — DFOS never receives them. */
+                url: string;
+                /**
+                 * @description Always `PUT`.
+                 * @constant
+                 */
+                method: "PUT";
+                /** @description Both headers are REQUIRED and must match these values byte for byte — they are inside the signature, so altering or omitting either is an S3 `403 SignatureDoesNotMatch`. */
+                headers: {
+                    /** @description Send this value verbatim. */
+                    "Content-Type": string;
+                    /** @description Send this value verbatim. */
+                    "Content-Disposition": string;
+                };
+                /**
+                 * Format: date-time
+                 * @description When the signature stops working (ISO 8601 UTC), one hour after the mint. Mint again after that; there is no way to extend one.
+                 */
+                expiresAt: string;
+            };
         };
         /**
          * @description Public author identity
@@ -1582,6 +1768,7 @@ export interface components {
          *         "avatarUrl": "https://dfos.imgix.net/media/public/24934ta9c7z8dahz7aed7r-img-5016.jpeg"
          *       },
          *       "body": "The exit-key framing is the part that clicks for me: the door exists before anyone needs it.",
+         *       "attachments": [],
          *       "publishedAt": "2026-09-04T19:12:40.000Z",
          *       "activityAt": "2026-09-04T20:01:05.000Z",
          *       "upvoteCount": 3,
@@ -1602,6 +1789,8 @@ export interface components {
             author: components["schemas"]["PublicAuthorOutput"] | null;
             /** @description Comment body (markdown) */
             body: string | null;
+            /** @description Files attached to the comment, in order. Always present, empty when there are none — and the only content a comment with a `null` body has. Private media carries time-limited signed `url` / `playbackUrl` values; see `urlExpiresAt`. */
+            attachments: components["schemas"]["PublicMediaOutput"][];
             /**
              * Format: date-time
              * @description When the comment was published (ISO 8601 UTC)
@@ -1636,6 +1825,7 @@ export interface components {
          *             "avatarUrl": "https://dfos.imgix.net/media/public/24934ta9c7z8dahz7aed7r-img-5016.jpeg"
          *           },
          *           "body": "The exit-key framing is the part that clicks for me: the door exists before anyone needs it.",
+         *           "attachments": [],
          *           "publishedAt": "2026-09-04T19:12:40.000Z",
          *           "activityAt": "2026-09-04T20:01:05.000Z",
          *           "upvoteCount": 3,
@@ -1673,6 +1863,15 @@ export interface components {
          *         "avatarUrl": "https://dfos.imgix.net/media/public/ekceek9z64vz4cavrzr7v2-lil-robo-pfp.png"
          *       },
          *       "body": "Same. That and origin binding running in both directions.",
+         *       "attachments": [
+         *         {
+         *           "id": "media_2t9crk4hf7vz3ea8dn6r2c",
+         *           "filename": "studio-floor.jpg",
+         *           "url": "https://dfos.imgix.net/media/public/2t9crk4hf7vz3ea8dn6r2c-studio-floor.jpg",
+         *           "contentType": "image/jpeg",
+         *           "contentLength": 812446
+         *         }
+         *       ],
          *       "publishedAt": "2026-09-04T20:01:05.000Z",
          *       "upvoteCount": 0,
          *       "replyCount": 0,
@@ -1692,6 +1891,8 @@ export interface components {
             author: components["schemas"]["PublicAuthorOutput"] | null;
             /** @description Comment body (markdown) */
             body: string | null;
+            /** @description Files attached to the comment, in order. Always present, empty when there are none — and the only content a comment with a `null` body has. Private media carries time-limited signed `url` / `playbackUrl` values; see `urlExpiresAt`. */
+            attachments: components["schemas"]["PublicMediaOutput"][];
             /**
              * Format: date-time
              * @description When the comment was published (ISO 8601 UTC)
@@ -4124,8 +4325,15 @@ export interface operations {
                      * @example DFOS beyond DFOS: sign-in, domains, and your own keys
                      */
                     title?: string;
-                    /** @description Post body (markdown) */
+                    /** @description Post body (markdown). A long post may reference attached media inline as `![alt](attachment://<mediaId>)`; a short post refuses inline images and carries them as `attachments` instead. */
                     body: string;
+                    /**
+                     * @description Ordered media ids the granting user uploaded through `POST /spaces/{space}/media`, at most 10 — and at most 4 on a short post (one with no `title`). Media somebody else uploaded is the same 404 as media that does not exist.
+                     * @example [
+                     *       "media_2t9crk4hf7vz3ea8dn6r2c"
+                     *     ]
+                     */
+                    attachments?: string[];
                 };
             };
         };
@@ -4233,6 +4441,13 @@ export interface operations {
                      * @example topic_6c2efd472dvt8rf9k4ftcc
                      */
                     topic?: string;
+                    /**
+                     * @description Ordered media ids the granting user uploaded through `POST /spaces/{space}/media`, at most 10 — and at most 4 on a short post (one with no `title`). Media somebody else uploaded is the same 404 as media that does not exist.
+                     * @example [
+                     *       "media_2t9crk4hf7vz3ea8dn6r2c"
+                     *     ]
+                     */
+                    attachments?: string[];
                 };
             };
         };
@@ -4367,11 +4582,18 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody: {
+        requestBody?: {
             content: {
                 "application/json": {
-                    /** @description Comment body (markdown) */
-                    body: string;
+                    /** @description Comment body (markdown). Optional when `attachments` is set. */
+                    body?: string;
+                    /**
+                     * @description Ordered media ids the granting user uploaded through `POST /spaces/{space}/media`, at most 10. Media somebody else uploaded is the same 404 as media that does not exist.
+                     * @example [
+                     *       "media_2t9crk4hf7vz3ea8dn6r2c"
+                     *     ]
+                     */
+                    attachments?: string[];
                     /**
                      * @description Reply to this comment rather than to the post. Must be a comment on the same root post.
                      * @example comment_9rze4tk2vdc7fa38nhe6c2
@@ -4445,11 +4667,18 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody: {
+        requestBody?: {
             content: {
                 "application/json": {
-                    /** @description Replacement body (markdown) */
-                    body: string;
+                    /** @description Replacement body (markdown), replacing the whole body. */
+                    body?: string;
+                    /**
+                     * @description Ordered media ids the granting user uploaded through `POST /spaces/{space}/media`, at most 10. Media somebody else uploaded is the same 404 as media that does not exist.
+                     * @example [
+                     *       "media_2t9crk4hf7vz3ea8dn6r2c"
+                     *     ]
+                     */
+                    attachments?: string[];
                 };
             };
         };
@@ -4536,6 +4765,88 @@ export interface operations {
             409: components["responses"]["Replayed"];
             413: components["responses"]["PayloadTooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["ServiceUnavailable"];
+            default: components["responses"]["Error"];
+        };
+    };
+    "media.createUpload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                space: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /**
+                     * @description The original filename. Used for the object key and the `Content-Disposition` DFOS signs.
+                     * @example studio-floor.jpg
+                     */
+                    filename: string;
+                    /**
+                     * @description MIME type of the file. Any valid type is accepted, and it decides whether the object is public or private.
+                     * @example image/jpeg
+                     */
+                    contentType: string;
+                    /**
+                     * @description Exact byte length of the file. REQUIRED here: it is signed into the presigned `PUT` as `Content-Length`, so a body of any other length is refused by S3. Images are capped at 10MB, everything else at 4GB.
+                     * @example 812446
+                     */
+                    size: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicMediaUploadOutput"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["ProofRequired"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Replayed"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["ServiceUnavailable"];
+            default: components["responses"]["Error"];
+        };
+    };
+    "media.getUpload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                space: string;
+                mediaId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicOwnMediaOutput"];
+                };
+            };
+            401: components["responses"]["ProofRequired"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            413: components["responses"]["PayloadTooLarge"];
             429: components["responses"]["RateLimited"];
             503: components["responses"]["ServiceUnavailable"];
             default: components["responses"]["Error"];
