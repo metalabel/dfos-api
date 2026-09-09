@@ -1584,7 +1584,7 @@
         "properties": {
           "id": {
             "type": "string",
-            "description": "The space's stable entity id. Pass it back as `{space}` on any space-addressed route, for a space with a public profile — a space without one is a 404 on every such route, which is what makes the feed the only place it can be read.",
+            "description": "The space's stable entity id. Pass it back as `{space}` on the credential-aware space routes — posts, comments, and media: with a credential that covers the space (or a bare identity proof) and live membership, a private space resolves there too. The anonymous routes (`GET /spaces/{space}`, pages, topics, events, products, releases) still need a public profile.",
             "examples": [
               "space_vnzfk7hth9vadc3daahd48"
             ]
