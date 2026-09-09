@@ -48,18 +48,23 @@
   "pnpm": {
     "onlyBuiltDependencies": [
       "esbuild"
-    ]
+    ],
+    "overrides": {
+      "@types/node": "^24.13.3"
+    }
   },
   "dependencies": {
-    "openapi-fetch": "^0.14.1"
+    "openapi-fetch": "^0.17.0"
   },
   "devDependencies": {
     "@metalabel/dfos-client": "0.54.0",
-    "@types/node": "^24.10.4",
+    "@metalabel/dfos-protocol": "0.54.0",
+    "@metalabel/dfos-web-relay": "0.54.0",
+    "@types/node": "^24.13.3",
     "openapi-typescript": "^7.10.0",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3",
     "typescript7": "npm:typescript@7.0.2",
-    "vitest": "^4.1.8"
+    "vitest": "^4.1.11"
   }
 }
