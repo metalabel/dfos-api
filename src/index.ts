@@ -1,5 +1,4 @@
 import createClient from 'openapi-fetch';
-
 import type { paths } from './generated/api.js';
 
 /** The production DFOS API — the spec's `servers` entry, without its trailing slash. */

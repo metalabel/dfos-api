@@ -1,0 +1,11 @@
+node_modules
+dist
+pnpm-lock.yaml
+coverage
+notes.local
+
+# Generator output, never hand-edited. `pnpm generate` rewrites src/generated
+# from the openapi.json snapshot, and CI byte-compares both against a fresh
+# run, so reformatting either would report drift on every check.
+openapi.json
+src/generated/

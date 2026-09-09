@@ -75,9 +75,7 @@ function fromPlatformRepo() {
   return { body, source: repo };
 }
 
-const { body, source } = process.argv.includes('--live')
-  ? await fromLive()
-  : fromPlatformRepo();
+const { body, source } = process.argv.includes('--live') ? await fromLive() : fromPlatformRepo();
 
 let spec;
 try {
