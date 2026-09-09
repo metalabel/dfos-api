@@ -13,7 +13,7 @@ export interface paths {
         };
         /**
          * Get a public space
-         * @description Fetch a space public profile + site config by its subdomain, entity id, or protocol DID. Returns 404 if the space does not exist or has no public profile (no existence leak — private and missing are indistinguishable).
+         * @description A space's public profile and site configuration, by subdomain, entity id, or protocol DID. Missing and non-public spaces give the same 404.
          */
         get: operations["spaces.getSpace"];
         put?: never;
@@ -33,7 +33,7 @@ export interface paths {
         };
         /**
          * List public spaces
-         * @description List public, discoverable spaces, cursor-paginated. Lean discovery-card projection per item. Optionally filter by `joinMode`, recency (`activeWithinDays`), `category`, or whether the space explicitly opted in to the directory (`optedIn`). Every filter is a request parameter, never encoded in a cursor. Ordered by recent activity.
+         * @description Public, discoverable spaces as lean cards, ordered by recent activity. Filter by `joinMode`, `activeWithinDays`, `category`, or `optedIn`.
          */
         get: operations["spaces.listSpaces"];
         put?: never;
@@ -53,21 +53,15 @@ export interface paths {
         };
         /**
          * List a space public feed
-         * @description List the posts in a space, newest first by default, cursor-paginated. Optionally filter by format, topic, or publication window, and select oldest-first ordering.
+         * @description List a space's posts, newest first. Filter by format, topic, or publication window, or sort oldest-first.
          *
-         *     **Anonymously**, only posts explicitly published to the public surface are returned (a public per-post view-access override, or a post in a topic marked world-readable). **With a credential covering this space and `read:posts`** (or a bare identity proof), the feed is the one the granting user sees: every post their membership reaches, with the full body and attachments where they genuinely read it, and a `viewer` block per post. A valid credential that does NOT cover this space returns exactly the anonymous feed — a grant only ever adds. Returns 404 if the space has no public profile, for every caller alike.
+         *     Without a proof the feed is the space's public posts. A grant covering this space and `read:posts` returns the feed the granting user sees; an uncovered grant returns the anonymous feed.
          */
         get: operations["posts.listPosts"];
         put?: never;
         /**
          * Write a post
-         * @description Write a post as the granting user, into a topic they can post in.
-         *
-         *     Text only. `title` decides the format — with one the post is a `long-post`, without one a `short-post` — and there is deliberately no way to attach media, set a cover, announce or broadcast the post, backdate it, override its view access, or fulfil an event: those fields do not exist on this input. Body length limits, the topic's own format policy, and the `post:create` permission are all enforced by the same engine the DFOS app writes through.
-         *
-         *     Requires `write:posts` covering this space under the delegated profile, or a bare identity proof. Returns 404 when the space has no public profile or the topic is one the user cannot reach — the same 404 for every caller, so the route never reports which topics exist.
-         *
-         *     Every write requires a per-request `jti` in the proof (`generateJti()` in the DFOS client mints one; `createApiAuthFetch` attaches one automatically for non-GET methods). Presenting the same `jti` twice inside the freshness window is a `409` — the first attempt may have landed, so re-read state rather than retrying, and mint a NEW `jti` for a genuine retry.
+         * @description Write a post as the granting user, into a topic they can post in. Text only: `title` makes it a `long-post`. Media, covers, announce, backdating, and view-access overrides are not on this input. An unreachable topic is a 404.
          */
         post: operations["posts.createPost"];
         delete?: never;
@@ -85,33 +79,23 @@ export interface paths {
         };
         /**
          * Get a post
-         * @description Fetch a single post in a space by ID. Returns a discriminated union on `state`: `eligible` (with the post content) when the caller can read it, or `gated` (with a slim space CTA, no content) when the post exists in this public space but the caller cannot.
+         * @description Fetch a post by ID. Returns a union on `state`: `eligible` with the post, or `gated` with a space CTA when the caller cannot read it.
          *
-         *     **With a credential covering this space and `read:posts`** (or a bare identity proof), "can read" means what the granting user can read, so a members-only post comes back `eligible` with the full body, attachments, and a `viewer` block. A valid credential that does NOT cover this space returns exactly the anonymous response. Returns 404 if the space has no public profile, the post does not exist, or the post is reached through the wrong space — the same 404, for every caller alike.
+         *     A missing post, a private space, and a post reached through the wrong space are the same 404.
          */
         get: operations["posts.getPost"];
         put?: never;
         post?: never;
         /**
          * Delete a post
-         * @description Delete one of the granting user's OWN posts.
-         *
-         *     OWN CONTENT ONLY — deleting another member's post is moderation, and this tier does not reach it even for an admin. Requires `write:posts` covering this space under the delegated profile, or a bare identity proof.
-         *
-         *     Every write requires a per-request `jti` in the proof (`generateJti()` in the DFOS client mints one; `createApiAuthFetch` attaches one automatically for non-GET methods). Presenting the same `jti` twice inside the freshness window is a `409` — the first attempt may have landed, so re-read state rather than retrying, and mint a NEW `jti` for a genuine retry.
+         * @description Delete one of the granting user's own posts. Own content only: another member's post is a 403 even for a space admin.
          */
         delete: operations["posts.deletePost"];
         options?: never;
         head?: never;
         /**
          * Edit a post
-         * @description Edit one of the granting user's OWN posts. Send at least one of `title`, `body`, or `topic`; anything you omit is left alone.
-         *
-         *     OWN CONTENT ONLY, and that is narrower than the app: a space admin editing somebody else's post is a moderation act, and this tier does not reach it. Editing a post the user did not write is a 403 even when their role in the space would allow it in the DFOS app.
-         *
-         *     Requires `write:posts` covering this space under the delegated profile, or a bare identity proof. A post that does not exist, sits in another space, or lives in a topic the user cannot reach is the same 404.
-         *
-         *     Every write requires a per-request `jti` in the proof (`generateJti()` in the DFOS client mints one; `createApiAuthFetch` attaches one automatically for non-GET methods). Presenting the same `jti` twice inside the freshness window is a `409` — the first attempt may have landed, so re-read state rather than retrying, and mint a NEW `jti` for a genuine retry.
+         * @description Edit one of the granting user's own posts. Send at least one of `title`, `body`, or `topic`; omitted fields are left alone. Own content only: editing another member's post is a 403 even for a space admin.
          */
         patch: operations["posts.editPost"];
         trace?: never;
@@ -126,21 +110,13 @@ export interface paths {
         get?: never;
         /**
          * Upvote a post
-         * @description Add the granting user's upvote to a post. IDEMPOTENT: upvoting a post they have already upvoted succeeds and returns the same state, so a client may safely re-send.
-         *
-         *     This writes the user's name onto a signal other members can see. Requires `write:upvotes` covering this space under the delegated profile, or a bare identity proof.
-         *
-         *     Every write requires a per-request `jti` in the proof (`generateJti()` in the DFOS client mints one; `createApiAuthFetch` attaches one automatically for non-GET methods). Presenting the same `jti` twice inside the freshness window is a `409` — the first attempt may have landed, so re-read state rather than retrying, and mint a NEW `jti` for a genuine retry.
+         * @description Add the granting user's upvote to a post. Idempotent.
          */
         put: operations["posts.upvotePost"];
         post?: never;
         /**
          * Remove a post upvote
-         * @description Remove the granting user's upvote from a post. IDEMPOTENT: removing an upvote that is not there succeeds and returns the same state.
-         *
-         *     Requires `write:upvotes` covering this space under the delegated profile, or a bare identity proof.
-         *
-         *     Every write requires a per-request `jti` in the proof (`generateJti()` in the DFOS client mints one; `createApiAuthFetch` attaches one automatically for non-GET methods). Presenting the same `jti` twice inside the freshness window is a `409` — the first attempt may have landed, so re-read state rather than retrying, and mint a NEW `jti` for a genuine retry.
+         * @description Remove the granting user's upvote from a post. Idempotent.
          */
         delete: operations["posts.removePostUpvote"];
         options?: never;
@@ -157,23 +133,13 @@ export interface paths {
         };
         /**
          * List a post’s comments
-         * @description The comment thread on a post, as the granting user sees it — cursor-paginated, flat, root comments by default.
-         *
-         *     Requires `read:posts` covering this space under the delegated profile, or a bare identity proof. There is NO anonymous projection: comment visibility inherits the post's everywhere in DFOS, and the conversation under a post is space interior rather than something the space published. Every refusal that is not an authentication failure collapses into the SAME 404 as an unknown post — a grant that does not reach this space, a post in another space, a post the user cannot read, and a post that does not exist are one answer.
-         *
-         *     Pass `parentCommentId` to walk one comment's replies instead of the roots.
+         * @description The comment thread on a post, cursor-paginated and flat, root comments by default. Pass `parentCommentId` to walk one comment's replies instead. There is no anonymous projection of a comment thread: an uncovered grant, a post in another space, a post the user cannot read, and a post that does not exist are all the same 404.
          */
         get: operations["comments.listPostComments"];
         put?: never;
         /**
          * Write a comment
-         * @description Write a comment on a post, as the granting user. Pass `parentCommentId` to reply to an existing comment instead of commenting on the post itself — threads are one level deep, so a reply to a reply attaches to the same root.
-         *
-         *     Text only: there is no way to attach media to a comment on this API. The parent post's visibility gate and the topic's `comment:create` permission are enforced by the same engine the DFOS app writes through, so a post the user cannot read is the same 404 the read routes give.
-         *
-         *     Requires `write:comments` covering this space under the delegated profile, or a bare identity proof.
-         *
-         *     Every write requires a per-request `jti` in the proof (`generateJti()` in the DFOS client mints one; `createApiAuthFetch` attaches one automatically for non-GET methods). Presenting the same `jti` twice inside the freshness window is a `409` — the first attempt may have landed, so re-read state rather than retrying, and mint a NEW `jti` for a genuine retry.
+         * @description Write a comment on a post, or pass `parentCommentId` to reply to an existing comment. Threads are one level deep: a reply to a reply attaches to the same root. Text only — a comment cannot carry media. A post the user cannot read answers the same 404 as one that does not exist.
          */
         post: operations["comments.createComment"];
         delete?: never;
@@ -194,24 +160,14 @@ export interface paths {
         post?: never;
         /**
          * Delete a comment
-         * @description Delete one of the granting user's OWN comments. Replies to it are not deleted with it.
-         *
-         *     OWN CONTENT ONLY — deleting another member's comment is moderation, which this tier does not reach. Requires `write:comments` covering this space under the delegated profile, or a bare identity proof.
-         *
-         *     Every write requires a per-request `jti` in the proof (`generateJti()` in the DFOS client mints one; `createApiAuthFetch` attaches one automatically for non-GET methods). Presenting the same `jti` twice inside the freshness window is a `409` — the first attempt may have landed, so re-read state rather than retrying, and mint a NEW `jti` for a genuine retry.
+         * @description Delete one of the granting user's own comments. Replies to it are not deleted with it. Own content only: deleting another member's comment is moderation, which this tier does not reach.
          */
         delete: operations["comments.deleteComment"];
         options?: never;
         head?: never;
         /**
          * Edit a comment
-         * @description Edit one of the granting user's OWN comments.
-         *
-         *     OWN CONTENT ONLY, and narrower than the app: editing another member's comment is not something this tier can do for anybody, whatever their role in the space.
-         *
-         *     Requires `write:comments` covering this space under the delegated profile, or a bare identity proof. A comment that does not exist, sits in another space, or hangs off a post the user cannot read is the same 404.
-         *
-         *     Every write requires a per-request `jti` in the proof (`generateJti()` in the DFOS client mints one; `createApiAuthFetch` attaches one automatically for non-GET methods). Presenting the same `jti` twice inside the freshness window is a `409` — the first attempt may have landed, so re-read state rather than retrying, and mint a NEW `jti` for a genuine retry.
+         * @description Replace the body of one of the granting user's own comments. Own content only: this tier cannot edit another member's comment, whatever the caller's role in the space. A comment that does not exist, sits in another space, or hangs off a post the user cannot read is the same 404.
          */
         patch: operations["comments.editComment"];
         trace?: never;
@@ -226,21 +182,13 @@ export interface paths {
         get?: never;
         /**
          * Upvote a comment
-         * @description Add the granting user's upvote to a comment. IDEMPOTENT: upvoting one they have already upvoted succeeds and returns the same state.
-         *
-         *     Requires `write:upvotes` covering this space under the delegated profile, or a bare identity proof.
-         *
-         *     Every write requires a per-request `jti` in the proof (`generateJti()` in the DFOS client mints one; `createApiAuthFetch` attaches one automatically for non-GET methods). Presenting the same `jti` twice inside the freshness window is a `409` — the first attempt may have landed, so re-read state rather than retrying, and mint a NEW `jti` for a genuine retry.
+         * @description Add the granting user's upvote to a comment. Idempotent: upvoting a comment they have already upvoted returns the same state.
          */
         put: operations["comments.upvoteComment"];
         post?: never;
         /**
          * Remove a comment upvote
-         * @description Remove the granting user's upvote from a comment. IDEMPOTENT: removing one that is not there succeeds and returns the same state.
-         *
-         *     Requires `write:upvotes` covering this space under the delegated profile, or a bare identity proof.
-         *
-         *     Every write requires a per-request `jti` in the proof (`generateJti()` in the DFOS client mints one; `createApiAuthFetch` attaches one automatically for non-GET methods). Presenting the same `jti` twice inside the freshness window is a `409` — the first attempt may have landed, so re-read state rather than retrying, and mint a NEW `jti` for a genuine retry.
+         * @description Remove the granting user's upvote from a comment. Idempotent: removing an upvote that is not there returns the same state.
          */
         delete: operations["comments.removeCommentUpvote"];
         options?: never;
@@ -257,11 +205,9 @@ export interface paths {
         };
         /**
          * The cross-space feed
-         * @description The granting user's own post feed across the spaces this grant reaches — newest first, cursor-paginated, one flat stream. Each item carries the space it came from.
+         * @description The granting user's own feed across the spaces this grant reaches — newest first, one flat stream. Each item carries its space.
          *
-         *     Requires `read:posts` under the delegated profile, or a bare identity proof for a caller reading their own feed. The reach is the grant's: a credential covering all the user's spaces feeds every space they are an active member of, including ones joined later; a credential naming particular spaces feeds exactly those. A space the user has left contributes nothing and is not reported — losing a space looks like silence, not an error. A caller in no reachable space gets an empty page.
-         *
-         *     Pinned posts are NOT hoisted: a pin is a fact about one space's own feed, and hoisting every space's pins onto page one would bury the chronology this route exists for.
+         *     A grant covering all the user's spaces feeds every space they are an active member of, including ones joined later. A space the user has left contributes nothing. Pinned posts are not hoisted.
          */
         get: operations["feed.listFeed"];
         put?: never;
@@ -281,7 +227,7 @@ export interface paths {
         };
         /**
          * List a space public pages
-         * @description List a space's published pages, ordered by sort order then ID and cursor-paginated. Returns 404 if the space has no public profile. Pages are always fully public; only enabled pages appear.
+         * @description A space's published pages, ordered by `sortOrder` then id. Only enabled pages appear.
          */
         get: operations["pages.listPages"];
         put?: never;
@@ -301,7 +247,7 @@ export interface paths {
         };
         /**
          * Get a public page
-         * @description Fetch a single published page in a space by stable page ID or slug, with its full markdown body and resolved inline media. Returns 404 if the space has no public profile, the page does not exist, belongs to another space, or is not enabled — all byte-identical (no existence leak).
+         * @description One published page by id or slug, with its full body and inline media. A missing, disabled, foreign-space, or non-public page is the same 404.
          */
         get: operations["pages.getPage"];
         put?: never;
@@ -321,7 +267,7 @@ export interface paths {
         };
         /**
          * List a space public events
-         * @description List a space's PUBLIC events within a time window, earliest first, cursor-paginated. Only events the space marked public and published appear — member-only, group-only, and admin-only events are absent, and so are drafts and cancelled events (no existence leak: an absent event is indistinguishable from one that was never created). Returns 404 if the space has no public profile. Recurring events are expanded into individual occurrences within the window; a cursor walk reaches at most the first 500 occurrences of that window (narrow the window to see past them).
+         * @description A space's public, published events within a time window, earliest first. Non-public, draft, and cancelled events are absent. Recurring events expand into occurrences; a cursor walk reaches the first 500 in the window — narrow the window rather than paging past them.
          */
         get: operations["events.listSpaceEvents"];
         put?: never;
@@ -341,7 +287,7 @@ export interface paths {
         };
         /**
          * Get a public event
-         * @description Fetch ONE occurrence of a space's public event by its event id — the direct read behind a per-event page, and the same item shape the listings return. Defaults to the event's SOONEST UPCOMING public occurrence within the ~1-year look-ahead this API serves; pass `occ` to address a specific occurrence, including one beyond that horizon. Returns 404 if the space has no public profile, the event does not exist, belongs to another space, is a draft, is cancelled, is not public, or has no upcoming public occurrence at all — every case byte-identical (no existence leak). Resolution runs the SAME expansion as `GET /spaces/{space}/events`, so `recurrenceId` here is byte-identical to the one the listing emits for the same occurrence, and any pair you take off a listing addresses the same occurrence when you hand it back.
+         * @description One occurrence of a space's public event, in the shape the listings return. Defaults to the soonest upcoming occurrence; pass `occ` for a specific one, including beyond the ~1-year look-ahead. A missing, draft, cancelled, non-public, foreign-space, or fully past event is the same 404.
          */
         get: operations["events.getSpaceEvent"];
         put?: never;
@@ -361,7 +307,7 @@ export interface paths {
         };
         /**
          * List upcoming public events
-         * @description List upcoming PUBLIC events across every publicly-discoverable space, earliest first, cursor-paginated. Each item carries the space it belongs to. Same content rule as the per-space listing — public, published events only — with the space gate matching public space discovery (`GET /spaces`) rather than direct space lookup. Recurring events are expanded into individual occurrences within the window; a cursor walk reaches at most the first 500 occurrences of that window (narrow the window to see past them).
+         * @description Upcoming public events across every publicly-discoverable space, earliest first. Each item carries its space. Only spaces that appear in `GET /spaces` contribute. Recurring events expand into occurrences; a cursor walk reaches the first 500 in the window — narrow the window rather than paging past them.
          */
         get: operations["events.listUpcomingEvents"];
         put?: never;
@@ -381,7 +327,7 @@ export interface paths {
         };
         /**
          * List a space public products
-         * @description List the store products a space has published public purchase pages for, in the space's curated display order (`sortOrder`, lower first), cursor-paginated. A space that has never reordered its store reads newest-first. Each item is the same object the single-product route returns. Returns 404 if the space has no public profile (byte-identical to every other not-found — no existence leak). Products the seller has not published, and archived or inactive ones, never appear and are never counted in `sortOrder`; an empty list is a valid answer and reveals nothing.
+         * @description A space's public store products, in its display order (`sortOrder`, lowest first). Unpublished, archived, and inactive products never appear. Returns 404 when the space has no public profile.
          */
         get: operations["products.listProducts"];
         put?: never;
@@ -401,7 +347,7 @@ export interface paths {
         };
         /**
          * List public products across all spaces
-         * @description List every store product with a public purchase page, across every publicly-discoverable space, newest-created first, cursor-paginated. Each item is the same object the space-scoped routes return plus the `space` it belongs to. The space gate matches public space discovery (`GET /spaces`) rather than direct space lookup, so a space excluded from the directory is absent here even though its own product routes still serve it — and a space turning its public site off drops every one of its products from this feed by predicate. No filters beyond pagination in this version.
+         * @description Every store product with a public purchase page across every publicly-discoverable space, newest-created first. Each item adds the `space` it belongs to. A space absent from `GET /spaces` is absent here even though its own product routes still serve it.
          */
         get: operations["products.listAllProducts"];
         put?: never;
@@ -421,7 +367,7 @@ export interface paths {
         };
         /**
          * Get a public product
-         * @description Fetch a store product's public purchase page by its slug. Returns 404 if the space has no public profile, the slug matches no product, the product belongs to another space, the seller has not published a public page for it, or the product is archived or inactive — all byte-identical (no existence leak).
+         * @description Fetch a store product's public purchase page by its slug. Returns 404 when the space has no public profile or no publicly purchasable product matches the slug.
          */
         get: operations["products.getProduct"];
         put?: never;
@@ -441,7 +387,7 @@ export interface paths {
         };
         /**
          * List a space public releases
-         * @description List the releases a space has published public pages for, newest-published first (`publishedAt` descending), cursor-paginated. Returns 404 if the space has no public profile (byte-identical to every other not-found — no existence leak). Unpublished releases and releases with no slug never appear and are never counted; an empty list is a valid answer and reveals nothing.
+         * @description A space's published public releases, newest-published first. Returns 404 when the space has no public profile.
          */
         get: operations["releases.listSpaceReleases"];
         put?: never;
@@ -461,7 +407,7 @@ export interface paths {
         };
         /**
          * List public releases across all spaces
-         * @description List releases with a public page across every publicly-discoverable space, newest-published first (`publishedAt` descending), cursor-paginated. Each item is the same summary a space's own shelf returns plus the `space` it belongs to. The space gate matches public space discovery (`GET /spaces`) rather than direct space lookup, so a space excluded from the directory is absent here even though its own release routes still serve it. Unpublished releases and releases with no slug never appear; an empty page is a valid answer and reveals nothing. No filters beyond pagination in this version.
+         * @description Releases with a public page across every publicly-discoverable space, newest-published first. Each item is the space-shelf summary plus its `space`. A space absent from `GET /spaces` is absent here even though its own release routes still serve it.
          */
         get: operations["releases.listReleases"];
         put?: never;
@@ -481,7 +427,7 @@ export interface paths {
         };
         /**
          * Get a public release
-         * @description Fetch a release's public page by its slug, with its media wall, credits, composed products, and public dates. Returns 404 if the space has no public profile, the slug matches no release, the release belongs to another space, it has not been published, or it has been deleted — all byte-identical (no existence leak).
+         * @description Fetch a release's public page by its slug: media wall, credits, composed products, events. Returns 404 when nothing publicly visible matches.
          */
         get: operations["releases.getSpaceRelease"];
         put?: never;
@@ -501,7 +447,7 @@ export interface paths {
         };
         /**
          * List a space's public topics
-         * @description List the live, world-readable topics in a space, ordered by name then ID, cursor-paginated. Returns 404 if the space has no public profile.
+         * @description A space's public topics, ordered by name. Pass an `id` as the `topic` filter on the posts listing.
          */
         get: operations["topics.listTopics"];
         put?: never;
@@ -521,7 +467,7 @@ export interface paths {
         };
         /**
          * Get a public topic
-         * @description Fetch a single live, world-readable topic in a space by its stable topic ID — the direct read behind a per-topic page. Pair it with `GET /spaces/{space}/posts?topic=...` for the topic's public posts. Returns 404 if the space has no public profile, the topic does not exist, belongs to another space, is deleted, is not world-readable, or carries no public post feed — all byte-identical (no existence leak).
+         * @description A single public topic. Pair it with `GET /spaces/{space}/posts?topic=...` for the topic's posts. Missing, deleted, non-public, and out-of-space topics all return the same 404.
          */
         get: operations["topics.getTopic"];
         put?: never;
@@ -541,7 +487,7 @@ export interface paths {
         };
         /**
          * Get a public user profile
-         * @description Fetch a public user profile by its handle (username), its identity entity id, or its protocol DID. Handles are mutable aliases — the id and DID are canonical. Returns 404 if the user does not exist, has opted their profile out of public visibility, or is not a user identity (no existence leak — private and missing are indistinguishable).
+         * @description Fetch a public user profile by handle, identity entity id, or protocol DID. A missing user and one whose profile is not public both return the same 404.
          */
         get: operations["users.getUser"];
         put?: never;
@@ -561,7 +507,7 @@ export interface paths {
         };
         /**
          * List public user profiles
-         * @description List public member profiles, cursor-paginated. Profiles are public by default and owners can opt out — an opted-out profile does not appear here. Each row carries only the terse pinned-space cards; fetch the profile for the full membership shelf. Ordering is deterministic and cursor-stable but otherwise unspecified; do not depend on it.
+         * @description List public user profiles, cursor-paginated. An owner who opted out does not appear. Ordering is deterministic and cursor-stable but otherwise unspecified.
          */
         get: operations["users.listUsers"];
         put?: never;
@@ -581,7 +527,7 @@ export interface paths {
         };
         /**
          * List a user's public spaces
-         * @description The complete list of public spaces a user belongs to, cursor-paginated: pinned spaces first in the user's chosen order, then the rest by join recency. A space appears only if it is public, the space allows it, and the user has not hidden it — so this is a curated shelf, not a membership audit. Never includes roles, member numbers, or join dates. Returns 404 if the user does not exist, has opted their profile out of public visibility, or is not a user identity (no existence leak). A public profile with nothing to show returns an empty list, not a 404.
+         * @description The public spaces a user belongs to, cursor-paginated: pinned first in the user's chosen order, then the rest by join recency. Only spaces that are public and unhidden appear; a profile with nothing to show returns an empty page, not a 404. 404s exactly as `GET /users/{user}` does — opted out, missing, or not a user identity.
          */
         get: operations["users.getUserSpaces"];
         put?: never;
@@ -601,7 +547,7 @@ export interface paths {
         };
         /**
          * Get your own profile
-         * @description Read a user's own profile. Two ways to call it, per the DFOS API-AUTH specification. **Your own key:** `Authorization: DFOS <identity-proof>` and no `X-Credential` — the subject is the proof's `kid` DID, which is the signer itself, and the response carries every field, because you are reading your own data. **On a user's behalf:** `Authorization: DFOS <request-proof>` alongside `X-Credential: <credential>` — here the signer is the credential's AUDIENCE (your application) and the subject is the credential chain's ROOT issuer, the user who granted access; the route requires the `read:profile` **or** `read:email` action on this host, and the response is assembled from the actions the grant actually carries: the profile fields (`username`, `displayName`, `description`, `avatarUrl`, `createdAt`) under `read:profile`, `email` under `read:email`, so a `read:email`-only credential receives `{did, email}`. Under both, the presented artifact alone selects the subject: there is no path parameter and no way to name another user, and only `did` is unconditional. Presenting an identity proof together with `X-Credential` is malformed and refused.
+         * @description The authenticated user's own profile. Under a credential the response is assembled from the actions the grant carries: the profile fields under `read:profile`, `email` under `read:email`, and only `did` unconditionally. A field the grant does not cover is absent rather than null, so check for the key. Under a bare identity proof every field is present.
          */
         get: operations["profile.getOwnProfile"];
         put?: never;
@@ -621,7 +567,7 @@ export interface paths {
         };
         /**
          * List your space memberships
-         * @description The spaces the subject currently belongs to, cursor-paginated, each with their role, how many groups they belong to inside it, and when the membership began. Callable two ways: with your own key (`Authorization: DFOS <identity-proof>`, no `X-Credential`), where the subject is the proof’s `kid` DID — the signer itself; or on a user’s behalf with a request proof plus a credential carrying the `read:memberships` action on this host, where the signer is the credential’s audience (your application) and the subject is the credential chain’s ROOT issuer, the user who granted access. Under both, the presented artifact alone selects the subject: there is no path parameter and no way to name another user. **Every** current membership is listed, private and unlisted spaces included — that is what this route is for, and it is what the consent line grants when a third party is the caller. Memberships the user has left, and spaces that were deleted, are not listed. Ordered by `joinedAt` ascending with the space `id` as a stable tiebreak, so a walk never skips or repeats. To check ONE space instead of walking, call `GET /membership/{space}`; for the groups themselves, walk `GET /group-memberships`.
+         * @description The spaces the subject belongs to, cursor-paginated, with their role, group count, and join date. Private and unlisted spaces are included; spaces they have left are not. Ordered by `joinedAt` ascending, space `id` as tiebreak. Use `GET /membership/{space}` to check one space.
          */
         get: operations["memberships.listMemberships"];
         put?: never;
@@ -641,7 +587,7 @@ export interface paths {
         };
         /**
          * Check one space membership
-         * @description Is the subject a member of this space? Returns the single membership entry when they are, and `404` when they are not. **The `404` is collapsed by design: "no such space" and "the user is not a member" are deliberately indistinguishable** — these routes disclose the subject's own memberships, never the existence of anything else, so the identifier is matched against their membership rows rather than resolved against the platform. This is the gating primitive for a relying party that only needs to ask "does this user belong to our space". Callable with your own identity proof, where the subject is the proof’s `kid` DID; or on a user’s behalf with a credential carrying the `read:memberships` action on this host, where the subject is the credential chain’s ROOT issuer rather than the application presenting it.
+         * @description Is the subject a member of this space? Returns the membership entry, or `404` when they are not — a space that does not exist and one they are not in are indistinguishable, because the identifier is matched against their own membership rows.
          */
         get: operations["memberships.getMembership"];
         put?: never;
@@ -661,7 +607,7 @@ export interface paths {
         };
         /**
          * List your group memberships
-         * @description The groups the subject currently belongs to, across every space, cursor-paginated — each with the group (including its EXACT active member count and flat `spaceId` / `spaceDid` refs), their role in it, and when the membership began. Callable with your own identity proof, where the subject is the proof’s `kid` DID; or on a user’s behalf with a credential carrying the `read:memberships` action on this host, where the subject is the credential chain’s ROOT issuer rather than the application presenting it. Pass `space` to scope to one space, `role` to scope to a role set. Ordered by `joinedAt` ascending with the group `id` as a stable tiebreak. Correlate `group.spaceId` with `space.id` from `GET /memberships` to reassemble the full graph — two flat walks rather than one nested page.
+         * @description The groups the subject belongs to across every space, cursor-paginated, with their role and join date. Filter with `space` and `role`. Ordered by `joinedAt` ascending, group `id` as tiebreak. Correlate `group.spaceId` with `space.id` from `GET /memberships` for the full graph.
          */
         get: operations["memberships.listGroupMemberships"];
         put?: never;
@@ -681,7 +627,7 @@ export interface paths {
         };
         /**
          * Check one group membership
-         * @description Is the subject a member of this group? Returns the single group-membership entry when they are, and `404` when they are not. **The `404` is collapsed by design: "no such group" and "the user is not a member" are deliberately indistinguishable** — the identifier is matched against the subject's own group memberships rather than resolved against the platform. The symmetric gating primitive to `GET /membership/{space}`, for a relying party gating on a role inside a space rather than on the space itself. Callable with your own identity proof, where the subject is the proof’s `kid` DID; or on a user’s behalf with a credential carrying the `read:memberships` action on this host, where the subject is the credential chain’s ROOT issuer rather than the application presenting it.
+         * @description Is the subject a member of this group? Returns the group-membership entry, or `404` when they are not — a group that does not exist and one they are not in are indistinguishable. The symmetric primitive to `GET /membership/{space}`.
          */
         get: operations["memberships.getGroupMembership"];
         put?: never;
@@ -701,7 +647,7 @@ export interface paths {
         };
         /**
          * Describe the presented credential
-         * @description Introspect the credential presented on this request: who issued it, which application holds it, what it grants, how that application was resolved, and when it was issued and expires. Credential-gated like every route in this family — an `Authorization: DFOS <request-proof>` header alongside `X-Credential: <credential>` — but it requires **no particular scope**: a credential may always describe itself. Use it at startup to confirm a stored grant is still standing and to discover what it covers before calling a route that needs a scope you may not have. A revoked or expired credential does not describe itself; it is refused with `403` like anywhere else.
+         * @description Introspect the credential presented on this request: who issued it, which application holds it, what it grants, and when it was issued and expires. It requires no particular action — a credential may always describe itself. A revoked or expired one is refused with `403`.
          */
         get: operations["credential.getCredential"];
         put?: never;
@@ -723,33 +669,7 @@ export interface paths {
         put?: never;
         /**
          * Present a key-add envelope
-         * @description Present a signed key-add envelope against an open ceremony. **Takes no authentication** — the code and the signature are the whole capability, and the client presenting them has no session by construction.
-         *
-         *     **This does not add the key.** It verifies the envelope, stores it, and moves the ceremony to `presented`. The identity's owner then sees the key's fingerprint in their DFOS settings and either adopts it — which is what appends the operation — or rejects it. Poll `GET /v1/key-proof/status?code=…` to find out which.
-         *
-         *     **You do not construct this URL.** Resolve the 8-character code the user carries out of the DFOS app at `GET /.well-known/dfos-key-proof?code=<code>` on this host. That lookup answers with everything needed to sign, and everything a tool MUST show its human before signing:
-         *
-         *     ```json
-         *     {
-         *       "present": "https://api.dfos.com/v1/key-proof/present",
-         *       "nonce": "…",
-         *       "audience": "api.dfos.com",
-         *       "purpose": "did:dfos:key-add",
-         *       "adopts": { "did": "did:dfos:…", "handle": "…", "displayName": "…" },
-         *       "roleSet": "auth,assert",
-         *       "prevCID": "…",
-         *       "expiresAt": "…",
-         *       "relay": "https://relay.dfos.com"
-         *     }
-         *     ```
-         *
-         *     `roleSet` VARIES BY CEREMONY and the example above is one value, not a constant. It is the canonical comma-joined set the person chose when they minted the code — `auth,assert` for an ordinary signing key, `controller` for a key registered to carry the identity beyond this platform. **Sign the set the resolution handed you and render it to your human before signing; never hardcode one.** It is a signed POSITION member, so an envelope carrying a different set is refused (before anything is consumed — the code stays live), and a tool that assumed a set would be asking somebody to consent to a grant it is not describing.
-         *
-         *     An unknown code and a lapsed one both answer `404 { "error": "unknown or expired code" }`, deliberately identically. The well-known sits outside `/v1` (it is a discovery document, not a versioned resource), which is why it does not appear as an operation in this specification.
-         *
-         *     The envelope is a compact JWS with `typ` `did:dfos:key-add`, signed by the key being added. Its payload is byte-compared against the canonical serialization of exactly `{ nonce, audience, did, roleSet, prevCID, publicKeyMultibase, timestamp }` in that order, so a payload with the right values in a different order is a different signed object and is refused. `audience` is this API's own host; `did`, `roleSet` and `prevCID` are the POSITION the key is being added at, and all three come from the resolution above — an envelope is bound to one introduction on one chain at one head, and is worthless anywhere else. `timestamp` is a whole-second UTC instant within five minutes of now. The optional `description` in the request body is **not** one of those members and is not signed.
-         *
-         *     Only a bad SIGNATURE consumes the ceremony: that leaves it `failed` and a new code must be minted. Every other refusal — a malformed body, an over-long `description`, an over-cap `envelope`, a wrong audience, a stale timestamp, a `did`/`roleSet`/`prevCID` that does not match — is decided before anything is consumed, so the code stays live and the command can simply be re-run. If the chain head moved while you were signing, re-resolve the code and present again with a fresh `prevCID`: **presenting the same key twice is admitted**, and replaces the stored envelope. Presenting a DIFFERENT key against a ceremony that already has one is refused. A public key that another identity chain has already PROVED is refused at adoption — one key names one identity, or "who signed this" stops having an answer.
+         * @description Present a signed key-add envelope against an open ceremony; poll `GET /v1/key-proof/status` for the owner's decision. Resolve the user's code at `GET /.well-known/dfos-key-proof?code=…` first — it supplies five of the envelope's seven signed members (`nonce`, `audience`, `did`, `roleSet`, `prevCID`). The envelope's payload is byte-compared against the canonical serialization of all seven — `{ nonce, audience, did, roleSet, prevCID, publicKeyMultibase, timestamp }` — in that order. `audience` is this API's own host; `timestamp` is a whole-second UTC instant within five minutes of now. Every refusal but a bad signature leaves the code live to retry; re-presenting the same key is admitted, a different key is refused. Full member table: https://docs.dfos.com/docs/api/key-proof.
          */
         post: operations["keyProof.present"];
         delete?: never;
@@ -767,17 +687,7 @@ export interface paths {
         };
         /**
          * Poll a key-add ceremony
-         * @description Where the ceremony behind a code has got to. **Takes no authentication** — the code is the capability, and this is scoped to nothing else.
-         *
-         *     This is the leg a CLI waits on after presenting: the identity's owner has to adopt or reject in their browser, and until they do the answer is `presented`.
-         *
-         *     Watch `stale`. While `presented`, it turns true if another writer moves the identity's chain head — the stored envelope is bound to the head it was signed against, so it can no longer be adopted as-is. Re-resolve the code, sign a fresh envelope for the **same key** with the new `prevCID`, and present it again; the owner's approval carries across, and their browser retries the adoption on its own.
-         *
-         *     On `adopted`, `onAdopted` carries the DID, the chain-local key id, and the CID of the operation that added it — enough to fetch the chain from the relay the resolution named and file the key locally without asking anything else. **It is served only while the ceremony's ten minutes are still running.** Past `expiresAt` the answer narrows to the bare `status`: a spent code must not stay a permanent handle on somebody's identity, and a CLI polling its own ceremony has the receipt seconds after presenting — long before that matters.
-         *
-         *     `rejected` is not an error: the person declined a key they did not recognize, nothing was added, and the honest thing to tell your user is exactly that.
-         *
-         *     A code this deployment never issued is refused. A code it DID issue answers its real state, including after that state is terminal — which a caller needs, since the whole point of polling is to learn how the ceremony ended. So this endpoint does distinguish a real spent code from a fabricated one. That is one bit, it is deliberate, and it is what the rate limit is in front of; the 8-character code space is not a secret this endpoint is defending, the nonce and the signature are.
+         * @description Where the ceremony behind a code has got to. Poll after presenting: the answer stays `presented` until the identity's owner adopts or rejects in the DFOS app, and `rejected` is not an error. If `stale` turns true, present a fresh envelope for the same key; the owner's approval carries across. `onAdopted` is served only until `expiresAt`.
          */
         get: operations["keyProof.status"];
         put?: never;
@@ -797,7 +707,7 @@ export interface paths {
         };
         /**
          * Get protocol discovery info
-         * @description Return the protocol discovery document for this API deployment: the DID method and specification, plus URL templates for the relay proof plane and indexes.
+         * @description The protocol discovery document for this deployment: DID method, spec URL, relay URL, and relay endpoint templates.
          */
         get: operations["protocol.getProtocolInfo"];
         put?: never;
@@ -814,40 +724,49 @@ export interface components {
     schemas: {
         PublicPaginationInput: {
             /**
-             * @description Maximum number of items per page (default: 20, max: 100)
+             * @description Items per page. Default 20, max 100.
              * @example 20
              */
             limit?: number;
             /**
-             * @description Opaque cursor for forward pagination — fetch items after this cursor. Treat as an opaque token: pass back a `nextCursor`/`previousCursor` verbatim; do not parse or construct it (its encoding carries no stability guarantee).
-             * @example eyJpZCI6InBvc3RfNmVuY2M0YWtyemUyYWg5a250emQ5dCJ9
+             * @description Opaque cursor for forward pagination. Pass back a `nextCursor` verbatim; never parse it.
+             * @example eyJpZCI6InBvc3RfemUya2gyZDQ3dHplcmtoZXQ4MzQ4YyJ9
              */
             after?: string;
             /**
-             * @description Opaque cursor for backward pagination — fetch items before this cursor. Treat as an opaque token (see `after`).
-             * @example eyJpZCI6InBvc3RfNmVuY2M0YWtyemUyYWg5a250emQ5dCJ9
+             * @description Opaque cursor for backward pagination. Pass back a `previousCursor` verbatim.
+             * @example eyJpZCI6InBvc3RfemUya2gyZDQ3dHplcmtoZXQ4MzQ4YyJ9
              */
             before?: string;
         };
         /**
-         * @description Protocol DID — `did:dfos:` + 31 chain-derived chars (40 total). The ONLY DID universe the public wire speaks; never the internal 22-char OLTP identifier.
-         * @example did:dfos:6encc4akrze2ah9kntzd9tc8zr24crc
+         * @description Protocol DID — `did:dfos:` plus 31 chain-derived characters (40 total). The only DID form this API speaks; a DID of any other shape will not resolve.
+         * @example did:dfos:9ctvrdn9vedda7efetrhcdakfh4cr2k
          */
         ProtocolDid: string;
-        /** @description A resolved media object */
+        /**
+         * @description A resolved media object
+         * @example {
+         *       "id": "media_efrvdarnc6zd3nhv389cf2",
+         *       "filename": "p04.jpg",
+         *       "url": "https://dfos.imgix.net/media/public/efrvdarnc6zd3nhv389cf2-p04.jpg",
+         *       "contentType": "image/jpeg",
+         *       "contentLength": 2890442,
+         *       "width": 2752,
+         *       "height": 1536,
+         *       "blurHash": "eJ7ekWt%8{RQ.7tQoyWBfRoy8yVu?atQIBM{WBt7j[Rj%Lf8MyV[s;"
+         *     }
+         */
         PublicMediaOutput: {
-            /**
-             * @description Media object id — the value an `attachment://<id>` inline body token references. Use it to associate a body token with its entry in `bodyMedia` (required when a body carries more than one inline media item). Media ids already appear verbatim in the body markdown, so this exposes nothing new.
-             * @example media_6encc4akrze2ah9kntzd9t
-             */
+            /** @description Media object id — what an `attachment://<id>` inline body token references. Use it to match a token to its `bodyMedia` entry. */
             id: string;
-            /** @description Original uploaded filename of the media object */
+            /** @description Original uploaded filename */
             filename: string;
-            /** @description Resolved URL for the media object. A permanent, unsigned imgix CDN URL for public images; a time-limited SIGNED URL for private media (audio/video/files). When signed, `urlExpiresAt` is present — never persist a signed URL, re-fetch the post for a fresh one. */
+            /** @description Resolved URL for the media object. Permanent for public images; a time-limited signed URL for private media, which carries `urlExpiresAt`. */
             url: string;
             /** @description MIME type of the media object */
             contentType: string;
-            /** @description Size of the media object in bytes (absent until upload is finalized) */
+            /** @description Size in bytes, absent until the upload is finalized */
             contentLength?: number;
             /** @description Pixel width (images/video) */
             width?: number;
@@ -855,60 +774,105 @@ export interface components {
             height?: number;
             /** @description Blur-hash placeholder string for progressive image loading */
             blurHash?: string;
-            /** @description Uploader-authored caption / alt text, when present */
+            /** @description Uploader-authored caption or alt text */
             alt?: string;
             /** @description Playback length in milliseconds (audio/video only) */
             durationMs?: number;
-            /** @description CDN URL of an extracted poster frame / cover art (audio/video only) */
+            /** @description CDN URL of an extracted poster frame or cover art (audio/video only) */
             posterUrl?: string;
-            /** @description Streamable MP4 rendition URL (audio/video only). A permanent CDN URL for public media; a time-limited SIGNED URL for private media (in which case `urlExpiresAt` is present). */
+            /** @description Streamable MP4 rendition URL (audio/video only). Permanent for public media; a time-limited signed URL for private media. */
             playbackUrl?: string;
             /**
              * Format: date-time
-             * @description When the SIGNED `url` / `playbackUrl` expire (ISO 8601 UTC). PRESENT iff those URLs are time-limited signed URLs (private media); ABSENT means they are permanent (public images). Never persist a signed URL — re-fetch the post to obtain fresh ones.
+             * @description When the signed `url` and `playbackUrl` expire (ISO 8601 UTC). Present only for private media. Signed URLs are ephemeral — re-fetch rather than persisting them.
              */
             urlExpiresAt?: string;
             /** @description Amplitude overview for audio — up to 200 integers, each 0–100 */
             waveformPeaks?: number[];
         };
-        /** @description Public author identity */
+        /**
+         * @description Public author identity
+         * @example {
+         *       "did": "did:dfos:z8zt7ecn9h8n782kae3k796crva2c73",
+         *       "displayName": "Brandon",
+         *       "username": "bvalosek",
+         *       "avatarUrl": "https://dfos.imgix.net/media/public/ekceek9z64vz4cavrzr7v2-lil-robo-pfp.png"
+         *     }
+         */
         PublicAuthorOutput: {
             did: components["schemas"]["ProtocolDid"];
             /** @description Author display name */
             displayName?: string;
             /** @description Author username */
             username?: string;
-            /** @description Resolved public CDN URL for the author avatar, when present */
+            /** @description Public CDN URL for the author avatar */
             avatarUrl?: string;
         };
-        /** @description A public space profile and site configuration */
+        /**
+         * @description A public space profile and site configuration
+         * @example {
+         *       "id": "space_vnzfk7hth9vadc3daahd48",
+         *       "did": "did:dfos:9ctvrdn9vedda7efetrhcdakfh4cr2k",
+         *       "domain": "home",
+         *       "displayName": "DFOS",
+         *       "description": "The official DFOS of DFOS",
+         *       "avatarUrl": "https://dfos.imgix.net/media/public/8e87h8c37f2vz3v6h7h3at-frame-143726546.png",
+         *       "headerUrl": "https://dfos.imgix.net/media/public/dv6kef3nahvh4anecth2zt-bbgg.png",
+         *       "verifiedDomain": "dfos.com",
+         *       "links": [
+         *         {
+         *           "url": "https://dfos.com/",
+         *           "label": null,
+         *           "title": "Dark Forest OS",
+         *           "description": null,
+         *           "imageUrl": "https://dfos.imgix.net/media/public/ne979cake8har94728rne7-dfos-private-internet.png"
+         *         }
+         *       ],
+         *       "protocol": {
+         *         "headOpCid": "bafyreib4dybomqzwea3ottaeflaapuj4vlci6zpuelb54l3o3lqm4zntli",
+         *         "profile": {
+         *           "contentId": "e7nr6ta3ddhvnvdz6aav99anf2tna3r",
+         *           "headOpCid": "bafyreiejihfwzybgtg5b3pgahumbzpqkzp6h4m3etedo6x27xbenjhpvbu"
+         *         }
+         *       },
+         *       "joinMode": "open",
+         *       "siteMode": "posts",
+         *       "subscribeEnabled": true,
+         *       "memberCountSummary": "thousands of members",
+         *       "privatePostCountSummary": "hundreds of private posts",
+         *       "chatMessageCountSummary": "thousands of chat messages",
+         *       "eventCountSummary": "about a dozen events",
+         *       "mediaUploadCountSummary": "thousands of media uploads",
+         *       "createdAt": "2025-12-12T02:20:55.777Z"
+         *     }
+         */
         SpaceOutput: {
             /** @description Space short ID */
             id: string;
             did: components["schemas"]["ProtocolDid"];
-            /** @description Effective subdomain — custom domain if set, otherwise the normalized `space-{id}` form. A mutable alias; the `id` and `did` are canonical. */
+            /** @description Effective subdomain (custom domain if set, else `space-{id}`). A mutable alias; `id` and `did` are canonical. */
             domain: string;
             /** @description Space display name */
             displayName: string | null;
             /** @description Space description */
             description: string | null;
-            /** @description Resolved public CDN URL for the space avatar, or null */
+            /** @description Public CDN URL for the space avatar, or null */
             avatarUrl: string | null;
-            /** @description Resolved public CDN URL for the space header/wallpaper image, or null */
+            /** @description Public CDN URL for the space header image, or null */
             headerUrl: string | null;
-            /** @description An external domain this space has proven control of via origin binding, or null. NOT the same thing as `domain`, which is the space's DFOS subdomain. The claim is a `DfosOrigin` entry on the space's identity chain, and the domain independently publishes the space's DID back — so a third party can verify both halves without trusting this API (see `GET /protocol`). Null when the space claims no domain, has not yet proven a claim, or the domain now attests a different identity. A domain whose attestation has merely gone quiet keeps its value: silence alone is not a contradiction. But a domain that DID contradict this identity and has not attested it since reads null even once it falls silent — going offline does not retract a contradiction. */
+            /** @description A domain this space has proven control of through origin binding, or null. Distinct from `domain`, the DFOS subdomain. */
             verifiedDomain: string | null;
             /** @description Ordered space profile links (may be empty) */
             links: components["schemas"]["PublicProfileLinkOutput"][];
-            /** @description Protocol proof-plane handles for this space's identity and optional profile content chain. Present iff the identity chain exists; absent for legacy identities without a chain. Combine with `GET /protocol` to fetch and verify the chains from the relay. */
+            /** @description Proof-plane handles for this space's identity chain and optional profile chain. Absent for legacy identities without one; resolve them via `GET /protocol`. */
             protocol?: {
                 /** @description The identity chain's current head operation CID */
                 headOpCid: string;
-                /** @description Protocol proof-plane handles for the space profile content chain. Present iff the space has a non-empty profile chain; absent when the profile is empty or its chain has not been created. */
+                /** @description Proof-plane handles for the space profile content chain, absent when there is none. */
                 profile?: {
-                    /** @description The space profile's protocol content-chain id */
+                    /** @description The space profile's content-chain id */
                     contentId: string;
-                    /** @description The space profile content chain's current head operation CID */
+                    /** @description The profile content chain's current head operation CID */
                     headOpCid: string;
                 };
             };
@@ -918,21 +882,21 @@ export interface components {
              * @enum {string}
              */
             siteMode: "join" | "posts";
-            /** @description Whether the public email-subscribe form is enabled for this space */
+            /** @description Whether the public email-subscribe form is enabled */
             subscribeEnabled: boolean;
-            /** @description Worded member-count summary (e.g. "a few dozen members"). Public surfaces deliberately avoid exact counts. */
+            /** @description Worded member-count summary (e.g. "a few dozen members"), never exact. */
             memberCountSummary: string;
-            /** @description Worded summary of how many posts sit BEHIND the door — live posts this API cannot serve anonymously (e.g. "a few dozen private posts", "no private posts"). The exact complement of the space's public posts, which the posts listing enumerates precisely as `totalCount`. Approximate worded scale of the space's interior, never an exact count. An opaque display string from an open set — render it, never parse it. Viewer-independent. */
+            /** @description Worded summary of the posts this API does not serve anonymously (e.g. "a few dozen private posts"). Approximate scale, not an exact count; render it, never parse it. */
             privatePostCountSummary?: string;
-            /** @description Worded summary of how many chat messages the space's channels hold (e.g. "hundreds of chat messages", "no chat messages"). Covers every channel bound to the space, including its private ones. Direct and group messages are never space-bound and never counted. Approximate worded scale of the space's interior, never an exact count. An opaque display string from an open set — render it, never parse it. Viewer-independent. */
+            /** @description Worded summary of chat messages across the space's channels, private ones included; direct and group messages never count. Approximate scale, not an exact count; render it, never parse it. */
             chatMessageCountSummary?: string;
-            /** @description Worded summary of how many published events the space has scheduled (e.g. "a few events", "no events"). A recurring series counts once. Approximate worded scale of the space's interior, never an exact count. An opaque display string from an open set — render it, never parse it. Viewer-independent. */
+            /** @description Worded summary of the space's published events; a recurring series counts once. Approximate scale, not an exact count; render it, never parse it. */
             eventCountSummary?: string;
-            /** @description Worded summary of how many media files have been uploaded to the space (e.g. "about a hundred media uploads", "no media uploads"). Covers ALL of the space's media, including images it serves publicly — the avatar and header on this response are themselves uploads and are counted. Approximate worded scale of the space's interior, never an exact count. An opaque display string from an open set — render it, never parse it. Viewer-independent. */
+            /** @description Worded summary of the space's media uploads, publicly served ones like the avatar included. Approximate scale, not an exact count; render it, never parse it. */
             mediaUploadCountSummary?: string;
-            /** @description The normalized discovery category the space filed itself under. ABSENT (not null) when the space has not filed one, matching the `protocol` block convention. The same token the discovery listing emits and its `category` filter accepts. */
+            /** @description The discovery category the space filed itself under, absent when it has filed none. The same token the `category` filter accepts. */
             category?: string;
-            /** @description The questions an applicant answers when joining, present ONLY for a public application-mode space (`joinMode: "application"`) that has configured at least one question. Absent for every other space. Viewer-independent — the same list for all callers. */
+            /** @description The questions an applicant answers when joining. Present only for an application-mode space that configured at least one. */
             applicationQuestions?: components["schemas"]["PublicApplicationQuestionOutput"][];
             /**
              * Format: date-time
@@ -940,27 +904,44 @@ export interface components {
              */
             createdAt: string;
         };
-        /** @description A public space application question */
+        /**
+         * @description A public space application question
+         * @example {
+         *       "question": "What are you working on, and what brings you here?",
+         *       "isRequired": true
+         *     }
+         */
         PublicApplicationQuestionOutput: {
             /** @description The question text an applicant answers */
             question: string;
-            /** @description Whether answering this question is required to apply */
+            /** @description Whether an answer is required to apply */
             isRequired: boolean;
         };
-        /** @description Compact space context for a post response (header + join/sign-in CTA) */
+        /**
+         * @description Compact space context for a post response (header + join/sign-in CTA)
+         * @example {
+         *       "displayName": "DFOS",
+         *       "description": "The official DFOS of DFOS",
+         *       "avatarUrl": "https://dfos.imgix.net/media/public/8e87h8c37f2vz3v6h7h3at-frame-143726546.png",
+         *       "domain": "home",
+         *       "joinMode": "open",
+         *       "subscribeEnabled": true,
+         *       "memberCountSummary": "thousands of members"
+         *     }
+         */
         PublicSpaceCtaOutput: {
             /** @description Space display name */
             displayName: string | null;
             /** @description Space description */
             description: string | null;
-            /** @description Resolved public CDN URL for the space avatar, or null */
+            /** @description Public CDN URL for the space avatar, or null */
             avatarUrl: string | null;
-            /** @description Effective subdomain — custom domain if set, otherwise the normalized `space-{id}` form. A mutable alias. */
+            /** @description Effective subdomain (custom domain if set, else `space-{id}`). A mutable alias. */
             domain: string;
             joinMode: components["schemas"]["PublicSpaceJoinMode"];
-            /** @description Whether the public email-subscribe form is enabled for this space */
+            /** @description Whether the public email-subscribe form is enabled */
             subscribeEnabled: boolean;
-            /** @description Worded member-count summary (e.g. "a few dozen members"). Public surfaces deliberately avoid exact counts. */
+            /** @description Worded member-count summary (e.g. "a few dozen members"), never exact. */
             memberCountSummary: string;
         };
         /**
@@ -968,76 +949,157 @@ export interface components {
          * @enum {string}
          */
         PublicSpaceJoinMode: "closed" | "open" | "application" | "allowlist";
-        /** @description A public space in the discovery listing */
+        /**
+         * @description A public space in the discovery listing
+         * @example {
+         *       "id": "space_vnzfk7hth9vadc3daahd48",
+         *       "did": "did:dfos:9ctvrdn9vedda7efetrhcdakfh4cr2k",
+         *       "domain": "home",
+         *       "displayName": "DFOS",
+         *       "description": "The official DFOS of DFOS",
+         *       "avatarUrl": "https://dfos.imgix.net/media/public/8e87h8c37f2vz3v6h7h3at-frame-143726546.png",
+         *       "verifiedDomain": "dfos.com",
+         *       "links": [
+         *         {
+         *           "url": "https://dfos.com/",
+         *           "label": null,
+         *           "title": "Dark Forest OS",
+         *           "description": null,
+         *           "imageUrl": "https://dfos.imgix.net/media/public/ne979cake8har94728rne7-dfos-private-internet.png"
+         *         }
+         *       ],
+         *       "memberCountSummary": "thousands of members"
+         *     }
+         */
         SpaceDiscoveryItemOutput: {
             /** @description Space short ID */
             id: string;
             did: components["schemas"]["ProtocolDid"];
-            /** @description Effective subdomain — custom domain if set, otherwise the normalized `space-{id}` form. A mutable alias; the `id` and `did` are canonical. */
+            /** @description Effective subdomain (custom domain if set, else `space-{id}`). A mutable alias; `id` and `did` are canonical. */
             domain: string;
             /** @description Space display name */
             displayName: string | null;
             /** @description Space description */
             description: string | null;
-            /** @description Resolved public CDN URL for the space avatar, or null */
+            /** @description Public CDN URL for the space avatar, or null */
             avatarUrl: string | null;
-            /** @description An external domain this space has proven control of via origin binding, or null. NOT the same thing as `domain`, which is the space's DFOS subdomain. The claim is a `DfosOrigin` entry on the space's identity chain, and the domain independently publishes the space's DID back — so a third party can verify both halves without trusting this API (see `GET /protocol`). Null when the space claims no domain, has not yet proven a claim, or the domain now attests a different identity. A domain whose attestation has merely gone quiet keeps its value: silence alone is not a contradiction. But a domain that DID contradict this identity and has not attested it since reads null even once it falls silent — going offline does not retract a contradiction. */
+            /** @description A domain this space has proven control of through origin binding, or null. Distinct from `domain`, the DFOS subdomain. */
             verifiedDomain: string | null;
             /** @description Ordered space profile links (may be empty) */
             links: components["schemas"]["PublicProfileLinkOutput"][];
-            /** @description Worded member-count summary (e.g. "a few dozen members"). Public surfaces deliberately avoid exact counts. */
+            /** @description Worded member-count summary (e.g. "a few dozen members"), never exact. */
             memberCountSummary: string;
-            /** @description The normalized discovery category the space filed itself under. ABSENT (not null) when the space has not filed one, matching the `protocol` block convention. A storage token, not display copy — pass it back verbatim as the `category` filter. */
+            /** @description The discovery category the space filed itself under, absent when it has filed none. Pass it back verbatim as the `category` filter. */
             category?: string;
         };
-        /** @description A cursor-paginated page of public spaces */
+        /**
+         * @description A cursor-paginated page of public spaces
+         * @example {
+         *       "items": [
+         *         {
+         *           "id": "space_vnzfk7hth9vadc3daahd48",
+         *           "did": "did:dfos:9ctvrdn9vedda7efetrhcdakfh4cr2k",
+         *           "domain": "home",
+         *           "displayName": "DFOS",
+         *           "description": "The official DFOS of DFOS",
+         *           "avatarUrl": "https://dfos.imgix.net/media/public/8e87h8c37f2vz3v6h7h3at-frame-143726546.png",
+         *           "verifiedDomain": "dfos.com",
+         *           "links": [
+         *             {
+         *               "url": "https://dfos.com/",
+         *               "label": null,
+         *               "title": "Dark Forest OS",
+         *               "description": null,
+         *               "imageUrl": "https://dfos.imgix.net/media/public/ne979cake8har94728rne7-dfos-private-internet.png"
+         *             }
+         *           ],
+         *           "memberCountSummary": "thousands of members"
+         *         },
+         *         {
+         *           "id": "space_z94a849d9kdftfvv3n9hn7",
+         *           "did": "did:dfos:f3a4ncdta66627c6e2cnhhndan7k882",
+         *           "domain": "rakowwwski",
+         *           "displayName": "POPULAR",
+         *           "description": "Popular is a space we share our creative process and research practices. We get to know our work to get to know ourselves.",
+         *           "avatarUrl": "https://dfos.imgix.net/media/public/e2nfc34a369da2tfatcvf4-32351ed8-9995-48b3-ad72-1ac2fda11f47-1024x1024-2-.jpg",
+         *           "verifiedDomain": null,
+         *           "links": [],
+         *           "memberCountSummary": "about a dozen members"
+         *         }
+         *       ],
+         *       "nextCursor": "eyJpZCI6InBvc3RfemUya2gyZDQ3dHplcmtoZXQ4MzQ4YyJ9",
+         *       "previousCursor": null,
+         *       "totalCount": null
+         *     }
+         */
         SpaceDiscoveryPageOutput: {
             /** @description Page of public spaces */
             items: components["schemas"]["SpaceDiscoveryItemOutput"][];
-            /** @description Opaque cursor for the next page (null if no more results forward). Pass back verbatim as `after`; do not parse. */
+            /** @description Cursor for the next page, or null at the end. Pass back verbatim as `after`. */
             nextCursor: string | null;
-            /** @description Opaque cursor for the previous page (null if at the beginning). Optional — may be omitted on responses that do not support backward paging. Pass back verbatim as `before`; do not parse. */
+            /** @description Cursor for the previous page, or null at the start. Pass back verbatim as `before`. Omitted where backward paging is unsupported. */
             previousCursor?: string | null;
-            /** @description Total count of matching items (null if not computed). Optional — may be omitted entirely; clients must not depend on its presence. */
+            /** @description Total matching items, or null when not computed. May be omitted; do not depend on its presence. */
             totalCount?: number | null;
         };
-        /** @description A post in a space public feed */
+        /**
+         * @description A post in a space public feed
+         * @example {
+         *       "id": "post_ze2kh2d47tzerkhet8348c",
+         *       "slug": "dfos-beyond-dfos-sign-in-domains-and-your-own-keys",
+         *       "format": "long-post",
+         *       "title": "DFOS beyond DFOS: sign-in, domains, and your own keys",
+         *       "displayTitle": "DFOS beyond DFOS: sign-in, domains, and your own keys",
+         *       "excerpt": "Platforms today make your identity real by hosting it. Your @ is real because it appears on their domain. Your work is real because their page says it is...",
+         *       "author": {
+         *         "did": "did:dfos:z8zt7ecn9h8n782kae3k796crva2c73",
+         *         "displayName": "Brandon",
+         *         "username": "bvalosek",
+         *         "avatarUrl": "https://dfos.imgix.net/media/public/ekceek9z64vz4cavrzr7v2-lil-robo-pfp.png"
+         *       },
+         *       "cover": {
+         *         "id": "media_efrvdarnc6zd3nhv389cf2",
+         *         "filename": "p04.jpg",
+         *         "url": "https://dfos.imgix.net/media/public/efrvdarnc6zd3nhv389cf2-p04.jpg",
+         *         "contentType": "image/jpeg",
+         *         "contentLength": 2890442,
+         *         "width": 2752,
+         *         "height": 1536,
+         *         "blurHash": "eJ7ekWt%8{RQ.7tQoyWBfRoy8yVu?atQIBM{WBt7j[Rj%Lf8MyV[s;"
+         *       },
+         *       "upvoteCount": 14,
+         *       "commentCount": 6,
+         *       "isPinned": false,
+         *       "publishedAt": "2026-09-04T18:05:33.531Z",
+         *       "updatedAt": "2026-09-04T18:06:01.020Z",
+         *       "canonicalUri": "https://home.dfos.com/post/dfos-beyond-dfos-sign-in-domains-and-your-own-keys-ze2kh2d47tzerkhet8348c",
+         *       "protocol": {
+         *         "contentId": "d4743469vf6heca8t466ckknvzknha2",
+         *         "headOpCid": "bafyreiaztsa2wm76vu2t7nchqnpg3nl6jkydxolikj62ywwl3geccbbeby"
+         *       }
+         *     }
+         */
         PublicPostListItemOutput: {
-            /**
-             * @description Post ID (use as `{postId}` on the single-post route)
-             * @example post_6encc4akrze2ah9kntzd9t
-             */
+            /** @description Post ID. Use as `{postId}` on the single-post route. */
             id: string;
-            /**
-             * @description Server-generated URL slug for the post
-             * @example building-a-more-generous-internet
-             */
+            /** @description URL slug for the post */
             slug: string;
             format: components["schemas"]["PublicPostFormat"];
-            /**
-             * @description Post title
-             * @example Building a more generous internet
-             */
+            /** @description Post title */
             title: string | null;
-            /**
-             * @description Server-derived display label: the title when present, else a short markdown-stripped excerpt of the (above-fold) body, else null. Standardizes the untitled-post fallback; never derived from below-fold content.
-             * @example Building a more generous internet
-             */
+            /** @description The title, else a short markdown-stripped excerpt of the above-fold body, else null. */
             displayTitle: string | null;
-            /**
-             * @description Truncated plain-text preview of the post body (markdown-stripped)
-             * @example A field guide to shared infrastructure for creative communities.
-             */
+            /** @description Plain-text preview of the body, markdown-stripped */
             excerpt: string | null;
             /** @description Post author */
             author: components["schemas"]["PublicAuthorOutput"] | null;
             /** @description Post cover image, when present */
             cover?: components["schemas"]["PublicMediaOutput"];
-            /** @description Number of upvotes on the post */
+            /** @description Number of upvotes */
             upvoteCount: number;
-            /** @description Number of comments on the post */
+            /** @description Number of comments */
             commentCount: number;
-            /** @description Whether the space has pinned this post. The feed is ordered purely by recency (newest first); a client may use this flag to surface pinned posts itself. */
+            /** @description Whether the space has pinned this post. The feed is ordered by recency alone. */
             isPinned: boolean;
             /**
              * Format: date-time
@@ -1049,9 +1111,9 @@ export interface components {
              * @description When the post was last updated (ISO 8601 UTC)
              */
             updatedAt: string;
-            /** @description Canonical public web permalink for the post — the space public host (custom domain, else the `space-{id}` subdomain) plus the `/post/{slug}-{id}` path. Same value as on the single-post response. */
+            /** @description Canonical public web permalink for the post */
             canonicalUri?: string;
-            /** @description Protocol proof-plane handles for this post's content chain. Present iff the post's chain exists; absent for posts created in the last ~30 seconds (creation settlement) and legacy/ineligible posts. Combine with `GET /protocol` to fetch and verify the chain from the relay. */
+            /** @description Proof-plane handles for the post's content chain. Absent briefly after creation, for legacy posts, and for members-only posts in spaces where protocol broadcast is public-only. */
             protocol?: {
                 /** @description The post's protocol content-chain id */
                 contentId: string;
@@ -1061,43 +1123,86 @@ export interface components {
             viewer?: components["schemas"]["PublicPostViewerOutput"];
         };
         /**
-         * @description Post format: `short-post` (a short, typically untitled note) or `long-post` (a titled article). Open enum — treat an unrecognized value as a generic post.
+         * @description `short-post` (untitled note) or `long-post` (titled article). Open enum — render an unknown value as a generic post.
          * @example long-post
          * @enum {string}
          */
         PublicPostFormat: "short-post" | "long-post";
-        /** @description Full public post content */
+        /**
+         * @description Full public post content
+         * @example {
+         *       "id": "post_ze2kh2d47tzerkhet8348c",
+         *       "slug": "dfos-beyond-dfos-sign-in-domains-and-your-own-keys",
+         *       "format": "long-post",
+         *       "title": "DFOS beyond DFOS: sign-in, domains, and your own keys",
+         *       "displayTitle": "DFOS beyond DFOS: sign-in, domains, and your own keys",
+         *       "excerpt": "Platforms today make your identity real by hosting it. Your @ is real because it appears on their domain. Your work is real because their page says it is...",
+         *       "body": "Platforms today make your identity real by hosting it. Your @ is real because it appears on their domain. Your work is real because their page says it is.\n\nDFOS is built around a different split: the platform is where convenience lives, and the protocol is where continuity lives.",
+         *       "cover": {
+         *         "id": "media_efrvdarnc6zd3nhv389cf2",
+         *         "filename": "p04.jpg",
+         *         "url": "https://dfos.imgix.net/media/public/efrvdarnc6zd3nhv389cf2-p04.jpg",
+         *         "contentType": "image/jpeg",
+         *         "contentLength": 2890442,
+         *         "width": 2752,
+         *         "height": 1536,
+         *         "blurHash": "eJ7ekWt%8{RQ.7tQoyWBfRoy8yVu?atQIBM{WBt7j[Rj%Lf8MyV[s;"
+         *       },
+         *       "attachments": [],
+         *       "bodyMedia": [
+         *         {
+         *           "id": "media_rn2926ahdrnra6t4erc862",
+         *           "filename": "2026-09-04-siwd-consent-composite-equal-height.png",
+         *           "url": "https://dfos.imgix.net/media/public/rn2926ahdrnra6t4erc862-2026-09-04-siwd-consent-composite-equal-height.png",
+         *           "contentType": "image/png",
+         *           "contentLength": 273173,
+         *           "width": 2116,
+         *           "height": 1160,
+         *           "blurHash": "eRS6Pl%Mt7%May~qWBWBt7WBxuayWBofj[%Mxut7Rjj[-;WBWBt7ay"
+         *         }
+         *       ],
+         *       "author": {
+         *         "did": "did:dfos:z8zt7ecn9h8n782kae3k796crva2c73",
+         *         "displayName": "Brandon",
+         *         "username": "bvalosek",
+         *         "avatarUrl": "https://dfos.imgix.net/media/public/ekceek9z64vz4cavrzr7v2-lil-robo-pfp.png"
+         *       },
+         *       "topics": [
+         *         {
+         *           "id": "topic_6c2efd472dvt8rf9k4ftcc",
+         *           "name": "DFOS Blog"
+         *         }
+         *       ],
+         *       "canonicalUri": "https://home.dfos.com/post/dfos-beyond-dfos-sign-in-domains-and-your-own-keys-ze2kh2d47tzerkhet8348c",
+         *       "protocol": {
+         *         "contentId": "d4743469vf6heca8t466ckknvzknha2",
+         *         "headOpCid": "bafyreiaztsa2wm76vu2t7nchqnpg3nl6jkydxolikj62ywwl3geccbbeby"
+         *       },
+         *       "upvoteCount": 14,
+         *       "commentCount": 6,
+         *       "publishedAt": "2026-09-04T18:05:33.531Z",
+         *       "updatedAt": "2026-09-04T18:06:01.020Z"
+         *     }
+         */
         PublicPostOutput: {
             /** @description Post ID */
             id: string;
-            /**
-             * @description Server-generated URL slug for the post
-             * @example building-a-more-generous-internet
-             */
+            /** @description URL slug for the post */
             slug: string;
             format: components["schemas"]["PublicPostFormat"];
-            /**
-             * @description Post title
-             * @example Building a more generous internet
-             */
+            /** @description Post title */
             title: string | null;
-            /**
-             * @description Server-derived display label: the title when present, else a short markdown-stripped excerpt of the (above-fold) body, else null. Standardizes the untitled-post fallback; never derived from below-fold content.
-             * @example Building a more generous internet
-             */
+            /** @description The title, else a short markdown-stripped excerpt of the above-fold body, else null. */
             displayTitle: string | null;
-            /**
-             * @description Truncated plain-text preview of the post body (markdown-stripped)
-             * @example A field guide to shared infrastructure for creative communities.
-             */
+            /** @description Plain-text preview of the body, markdown-stripped */
             excerpt: string | null;
             /** @description Post content body (markdown) */
             body: string | null;
             /** @description Post cover image */
             cover?: components["schemas"]["PublicMediaOutput"];
-            /** @description Post attachments. Includes private media (audio/video/files), which carry time-limited signed `url` / `playbackUrl` values (see `urlExpiresAt`). */
+            /** @description Post attachments. Private media carries time-limited signed `url` / `playbackUrl` values; see `urlExpiresAt`. */
             attachments: components["schemas"]["PublicMediaOutput"][];
-            /** @description Media objects referenced inline in the post body markdown. The body carries `attachment://<id>` tokens; resolve each against this array by its `id`. Always present (empty array when none). */
+            /** @description Media referenced inline in the body via `attachment://<id>` tokens; resolve each by `id`. Empty when none. */
             bodyMedia: components["schemas"]["PublicMediaOutput"][];
             /** @description Post author */
             author: components["schemas"]["PublicAuthorOutput"] | null;
@@ -1108,55 +1213,52 @@ export interface components {
                 /** @description Topic name */
                 name: string;
             }[];
-            /** @description Link cards extracted from URLs in the post body, in appearance order. Absent when the post has no links. */
+            /** @description Link cards extracted from the body, in appearance order. Absent when there are none. */
             links?: {
                 /**
-                 * @description The original shared URL represented by this link card
-                 * @example https://example.com/field-notes
+                 * @description The shared URL
+                 * @example https://dfos.com/
                  */
                 url: string;
                 /**
-                 * @description Resolved page title, or null when unavailable
-                 * @example Field Notes
+                 * @description Resolved page title, or null
+                 * @example Dark Forest OS
                  */
                 title: string | null;
-                /** @description Resolved page description, or null when unavailable */
+                /** @description Resolved page description, or null */
                 description: string | null;
-                /**
-                 * @description Resolved site name, or null when unavailable
-                 * @example Example
-                 */
+                /** @description Resolved site name, or null */
                 siteName: string | null;
-                /** @description Permanent public CDN URL for the cached link preview image, when available */
+                /** @description Permanent CDN URL for the cached preview image, when available */
                 imageUrl?: string;
-                /** @description Permanent public CDN URL for the cached site favicon, when available */
+                /** @description Permanent CDN URL for the cached site favicon, when available */
                 faviconUrl?: string;
                 /** @description Zero-based order of first appearance in the post body */
                 sortOrder: number;
             }[];
-            /** @description Internal entity links derived from the served (folded) body. Viewer-independent; post and space labels resolve at the anonymous/public floor, while events must be published and space-visible in a space whose public profile is enabled. Omitted when no internal links resolve. */
+            /** @description Internal entity links resolved from the served body. Absent when none resolve. */
             entityLinks?: {
-                /** @description Normalized absolute internal URL as it appears in the served post body */
+                /** @description Absolute internal URL as it appears in the served body */
                 url: string;
-                /** @description Viewer-independent display label for the entity */
+                /** @description Display label for the entity */
                 label: string;
-                /** @description Entity kind. Current values: `post`, `space`, or `event`. Open enum — clients must render unknown values as ordinary links. */
+                /** @description Entity kind: `post`, `space`, or `event`. Open enum — render an unknown value as an ordinary link. */
                 kind: string;
             }[];
-            /** @description True when the body was truncated at a fold marker — only the above-fold teaser is present. An anonymous read is always the non-reader projection, so a folded post is always truncated for it; a member projection carries the full body when the caller genuinely reads the post. Absent when the post has no fold. */
+            /** @description True when only the above-fold teaser is present. Absent when the post has no fold. */
             folded?: boolean;
-            /** @description Canonical public web permalink for the post — the space public host (custom domain, else the `space-{id}` subdomain) plus the `/post/{slug}-{id}` path. */
+            /** @description Canonical public web permalink: the space public host plus `/post/{slug}-{id}`. */
             canonicalUri?: string;
-            /** @description Protocol proof-plane handles for this post's content chain. Present iff the post's chain exists; absent for posts created in the last ~30 seconds (creation settlement) and legacy/ineligible posts. Combine with `GET /protocol` to fetch and verify the chain from the relay. */
+            /** @description Proof-plane handles for the post's content chain. Absent briefly after creation, for legacy posts, and for members-only posts in spaces where protocol broadcast is public-only. */
             protocol?: {
                 /** @description The post's protocol content-chain id */
                 contentId: string;
                 /** @description The post content chain's current head operation CID */
                 headOpCid: string;
             };
-            /** @description Number of upvotes on the post */
+            /** @description Number of upvotes */
             upvoteCount: number;
-            /** @description Number of comments on the post */
+            /** @description Number of comments */
             commentCount: number;
             /**
              * Format: date-time
@@ -1170,71 +1272,188 @@ export interface components {
             updatedAt: string;
             viewer?: components["schemas"]["PublicPostViewerOutput"];
         };
-        /** @description A cursor-paginated page of public posts */
+        /**
+         * @description A cursor-paginated page of public posts
+         * @example {
+         *       "items": [
+         *         {
+         *           "id": "post_ze2kh2d47tzerkhet8348c",
+         *           "slug": "dfos-beyond-dfos-sign-in-domains-and-your-own-keys",
+         *           "format": "long-post",
+         *           "title": "DFOS beyond DFOS: sign-in, domains, and your own keys",
+         *           "displayTitle": "DFOS beyond DFOS: sign-in, domains, and your own keys",
+         *           "excerpt": "Platforms today make your identity real by hosting it. Your @ is real because it appears on their domain. Your work is real because their page says it is...",
+         *           "author": {
+         *             "did": "did:dfos:z8zt7ecn9h8n782kae3k796crva2c73",
+         *             "displayName": "Brandon",
+         *             "username": "bvalosek",
+         *             "avatarUrl": "https://dfos.imgix.net/media/public/ekceek9z64vz4cavrzr7v2-lil-robo-pfp.png"
+         *           },
+         *           "cover": {
+         *             "id": "media_efrvdarnc6zd3nhv389cf2",
+         *             "filename": "p04.jpg",
+         *             "url": "https://dfos.imgix.net/media/public/efrvdarnc6zd3nhv389cf2-p04.jpg",
+         *             "contentType": "image/jpeg",
+         *             "contentLength": 2890442,
+         *             "width": 2752,
+         *             "height": 1536,
+         *             "blurHash": "eJ7ekWt%8{RQ.7tQoyWBfRoy8yVu?atQIBM{WBt7j[Rj%Lf8MyV[s;"
+         *           },
+         *           "upvoteCount": 14,
+         *           "commentCount": 6,
+         *           "isPinned": false,
+         *           "publishedAt": "2026-09-04T18:05:33.531Z",
+         *           "updatedAt": "2026-09-04T18:06:01.020Z",
+         *           "canonicalUri": "https://home.dfos.com/post/dfos-beyond-dfos-sign-in-domains-and-your-own-keys-ze2kh2d47tzerkhet8348c",
+         *           "protocol": {
+         *             "contentId": "d4743469vf6heca8t466ckknvzknha2",
+         *             "headOpCid": "bafyreiaztsa2wm76vu2t7nchqnpg3nl6jkydxolikj62ywwl3geccbbeby"
+         *           }
+         *         },
+         *         {
+         *           "id": "post_n7hhz3hv6n4h8rde8c2ed9",
+         *           "slug": "the-dangers-of-self-expression",
+         *           "format": "long-post",
+         *           "title": "The dangers of self-expression",
+         *           "displayTitle": "The dangers of self-expression",
+         *           "excerpt": "The thread running through this week’s issue: what happens when more and more of life becomes something to optimize, perform, and monetize? This is why we’re making DFOS: a different world becomes...",
+         *           "author": {
+         *             "did": "did:dfos:27z77a722tacvrne3k7f6k6rzd9evkc",
+         *             "displayName": "Yancey",
+         *             "username": "ystrickler",
+         *             "avatarUrl": "https://dfos.imgix.net/media/public/v3rr6d9z7f2dad4hhde8cd-yancey-headshot.jpeg"
+         *           },
+         *           "cover": {
+         *             "id": "media_eet4k4rhdt3nt4n4kervvr",
+         *             "filename": "cover.png",
+         *             "url": "https://dfos.imgix.net/media/public/eet4k4rhdt3nt4n4kervvr-cover.png",
+         *             "contentType": "image/png",
+         *             "contentLength": 261229,
+         *             "width": 1051,
+         *             "height": 720,
+         *             "blurHash": "evQ,z6tQ}x%3A8xuj[oMj[ax=ij[EvWnw6%3j[bFj[afozj[Rjayt7"
+         *           },
+         *           "upvoteCount": 20,
+         *           "commentCount": 16,
+         *           "isPinned": false,
+         *           "publishedAt": "2026-09-02T14:54:48.551Z",
+         *           "updatedAt": "2026-09-02T14:54:48.725Z",
+         *           "canonicalUri": "https://home.dfos.com/post/the-dangers-of-self-expression-n7hhz3hv6n4h8rde8c2ed9",
+         *           "protocol": {
+         *             "contentId": "en8ne3nzft9rrte866v2423rn26r3er",
+         *             "headOpCid": "bafyreicmvn5tzg6vo5oey2itz3pacvmeemfggwecc62rdbnercnb6lggrm"
+         *           }
+         *         }
+         *       ],
+         *       "nextCursor": "eyJpZCI6InBvc3RfemUya2gyZDQ3dHplcmtoZXQ4MzQ4YyJ9",
+         *       "totalCount": 10
+         *     }
+         */
         PublicPostPageOutput: {
             /** @description Page of public posts */
             items: components["schemas"]["PublicPostListItemOutput"][];
-            /** @description Opaque cursor for the next page (null if no more results forward). Pass back verbatim as `after`; do not parse. */
+            /** @description Cursor for the next page, or null at the end. Pass back verbatim as `after`. */
             nextCursor: string | null;
-            /** @description Opaque cursor for the previous page (null if at the beginning). Optional — may be omitted on responses that do not support backward paging. Pass back verbatim as `before`; do not parse. */
+            /** @description Cursor for the previous page, or null at the start. Pass back verbatim as `before`. Omitted where backward paging is unsupported. */
             previousCursor?: string | null;
-            /** @description Total count of matching items (null if not computed). Optional — may be omitted entirely; clients must not depend on its presence. */
+            /** @description Total matching items, or null when not computed. May be omitted; do not depend on its presence. */
             totalCount?: number | null;
         };
-        /** @description The authenticated caller's own relationship to this post. Present ONLY on a member projection — a request that presented a credential (or identity proof) reaching this space. Absent on every anonymous response. */
+        /**
+         * @description The caller's own relationship to this post. Present only on a member projection.
+         * @example {
+         *       "upvoted": true
+         *     }
+         */
         PublicPostViewerOutput: {
             /** @description Whether the authenticated caller has upvoted this post. */
             upvoted: boolean;
         };
-        /** @description The space a feed item belongs to */
+        /**
+         * @description The space a feed item belongs to
+         * @example {
+         *       "id": "did:dfos:9ctvrdn9vedda7efetrhcdakfh4cr2k",
+         *       "name": "DFOS",
+         *       "url": "https://home.dfos.com"
+         *     }
+         */
         FeedSpaceRefOutput: {
             /**
-             * @description The space's protocol DID — the canonical, stable identifier. Pass it back as `{space}` on any space-addressed route.
-             * @example did:dfos:6encc4akrze2ah9kntzd9tc8zr24crc
+             * @description The space's protocol DID. Pass it back as `{space}` on any space-addressed route.
+             * @example did:dfos:9ctvrdn9vedda7efetrhcdakfh4cr2k
              */
             id: string;
-            /** @description Space display name, or null when it has none */
+            /** @description Space display name, or null */
             name: string | null;
-            /** @description The space's public web address (custom domain, else the `space-{id}` subdomain). Present for every space; a space with no public profile still has a canonical address, which is simply not anonymously reachable. */
+            /** @description The space's public web address: its custom domain, else the `space-{id}` subdomain. Present for private spaces too, where the address is real but does not resolve anonymously. */
             url: string;
         };
-        /** @description A post in the cross-space feed, with its space */
+        /**
+         * @description A post in the cross-space feed, with its space
+         * @example {
+         *       "id": "post_ze2kh2d47tzerkhet8348c",
+         *       "slug": "dfos-beyond-dfos-sign-in-domains-and-your-own-keys",
+         *       "format": "long-post",
+         *       "title": "DFOS beyond DFOS: sign-in, domains, and your own keys",
+         *       "displayTitle": "DFOS beyond DFOS: sign-in, domains, and your own keys",
+         *       "excerpt": "Platforms today make your identity real by hosting it. Your @ is real because it appears on their domain. Your work is real because their page says it is...",
+         *       "author": {
+         *         "did": "did:dfos:z8zt7ecn9h8n782kae3k796crva2c73",
+         *         "displayName": "Brandon",
+         *         "username": "bvalosek",
+         *         "avatarUrl": "https://dfos.imgix.net/media/public/ekceek9z64vz4cavrzr7v2-lil-robo-pfp.png"
+         *       },
+         *       "cover": {
+         *         "id": "media_efrvdarnc6zd3nhv389cf2",
+         *         "filename": "p04.jpg",
+         *         "url": "https://dfos.imgix.net/media/public/efrvdarnc6zd3nhv389cf2-p04.jpg",
+         *         "contentType": "image/jpeg",
+         *         "contentLength": 2890442,
+         *         "width": 2752,
+         *         "height": 1536,
+         *         "blurHash": "eJ7ekWt%8{RQ.7tQoyWBfRoy8yVu?atQIBM{WBt7j[Rj%Lf8MyV[s;"
+         *       },
+         *       "upvoteCount": 14,
+         *       "commentCount": 6,
+         *       "isPinned": false,
+         *       "publishedAt": "2026-09-04T18:05:33.531Z",
+         *       "updatedAt": "2026-09-04T18:06:01.020Z",
+         *       "canonicalUri": "https://home.dfos.com/post/dfos-beyond-dfos-sign-in-domains-and-your-own-keys-ze2kh2d47tzerkhet8348c",
+         *       "protocol": {
+         *         "contentId": "d4743469vf6heca8t466ckknvzknha2",
+         *         "headOpCid": "bafyreiaztsa2wm76vu2t7nchqnpg3nl6jkydxolikj62ywwl3geccbbeby"
+         *       },
+         *       "viewer": {
+         *         "upvoted": true
+         *       },
+         *       "space": {
+         *         "id": "did:dfos:9ctvrdn9vedda7efetrhcdakfh4cr2k",
+         *         "name": "DFOS",
+         *         "url": "https://home.dfos.com"
+         *       }
+         *     }
+         */
         FeedItemOutput: {
-            /**
-             * @description Post ID (use as `{postId}` on the single-post route)
-             * @example post_6encc4akrze2ah9kntzd9t
-             */
+            /** @description Post ID. Use as `{postId}` on the single-post route. */
             id: string;
-            /**
-             * @description Server-generated URL slug for the post
-             * @example building-a-more-generous-internet
-             */
+            /** @description URL slug for the post */
             slug: string;
             format: components["schemas"]["PublicPostFormat"];
-            /**
-             * @description Post title
-             * @example Building a more generous internet
-             */
+            /** @description Post title */
             title: string | null;
-            /**
-             * @description Server-derived display label: the title when present, else a short markdown-stripped excerpt of the (above-fold) body, else null. Standardizes the untitled-post fallback; never derived from below-fold content.
-             * @example Building a more generous internet
-             */
+            /** @description The title, else a short markdown-stripped excerpt of the above-fold body, else null. */
             displayTitle: string | null;
-            /**
-             * @description Truncated plain-text preview of the post body (markdown-stripped)
-             * @example A field guide to shared infrastructure for creative communities.
-             */
+            /** @description Plain-text preview of the body, markdown-stripped */
             excerpt: string | null;
             /** @description Post author */
             author: components["schemas"]["PublicAuthorOutput"] | null;
             /** @description Post cover image, when present */
             cover?: components["schemas"]["PublicMediaOutput"];
-            /** @description Number of upvotes on the post */
+            /** @description Number of upvotes */
             upvoteCount: number;
-            /** @description Number of comments on the post */
+            /** @description Number of comments */
             commentCount: number;
-            /** @description Whether the space has pinned this post. The feed is ordered purely by recency (newest first); a client may use this flag to surface pinned posts itself. */
+            /** @description Whether the space has pinned this post. The feed is ordered by recency alone. */
             isPinned: boolean;
             /**
              * Format: date-time
@@ -1246,9 +1465,9 @@ export interface components {
              * @description When the post was last updated (ISO 8601 UTC)
              */
             updatedAt: string;
-            /** @description Canonical public web permalink for the post — the space public host (custom domain, else the `space-{id}` subdomain) plus the `/post/{slug}-{id}` path. Same value as on the single-post response. */
+            /** @description Canonical public web permalink for the post */
             canonicalUri?: string;
-            /** @description Protocol proof-plane handles for this post's content chain. Present iff the post's chain exists; absent for posts created in the last ~30 seconds (creation settlement) and legacy/ineligible posts. Combine with `GET /protocol` to fetch and verify the chain from the relay. */
+            /** @description Proof-plane handles for the post's content chain. Absent briefly after creation, for legacy posts, and for members-only posts in spaces where protocol broadcast is public-only. */
             protocol?: {
                 /** @description The post's protocol content-chain id */
                 contentId: string;
@@ -1258,31 +1477,124 @@ export interface components {
             viewer?: components["schemas"]["PublicPostViewerOutput"];
             space: components["schemas"]["FeedSpaceRefOutput"];
         };
-        /** @description A cursor-paginated page of the cross-space feed */
+        /**
+         * @description A cursor-paginated page of the cross-space feed
+         * @example {
+         *       "items": [
+         *         {
+         *           "id": "post_ze2kh2d47tzerkhet8348c",
+         *           "slug": "dfos-beyond-dfos-sign-in-domains-and-your-own-keys",
+         *           "format": "long-post",
+         *           "title": "DFOS beyond DFOS: sign-in, domains, and your own keys",
+         *           "displayTitle": "DFOS beyond DFOS: sign-in, domains, and your own keys",
+         *           "excerpt": "Platforms today make your identity real by hosting it. Your @ is real because it appears on their domain. Your work is real because their page says it is...",
+         *           "author": {
+         *             "did": "did:dfos:z8zt7ecn9h8n782kae3k796crva2c73",
+         *             "displayName": "Brandon",
+         *             "username": "bvalosek",
+         *             "avatarUrl": "https://dfos.imgix.net/media/public/ekceek9z64vz4cavrzr7v2-lil-robo-pfp.png"
+         *           },
+         *           "cover": {
+         *             "id": "media_efrvdarnc6zd3nhv389cf2",
+         *             "filename": "p04.jpg",
+         *             "url": "https://dfos.imgix.net/media/public/efrvdarnc6zd3nhv389cf2-p04.jpg",
+         *             "contentType": "image/jpeg",
+         *             "contentLength": 2890442,
+         *             "width": 2752,
+         *             "height": 1536,
+         *             "blurHash": "eJ7ekWt%8{RQ.7tQoyWBfRoy8yVu?atQIBM{WBt7j[Rj%Lf8MyV[s;"
+         *           },
+         *           "upvoteCount": 14,
+         *           "commentCount": 6,
+         *           "isPinned": false,
+         *           "publishedAt": "2026-09-04T18:05:33.531Z",
+         *           "updatedAt": "2026-09-04T18:06:01.020Z",
+         *           "canonicalUri": "https://home.dfos.com/post/dfos-beyond-dfos-sign-in-domains-and-your-own-keys-ze2kh2d47tzerkhet8348c",
+         *           "protocol": {
+         *             "contentId": "d4743469vf6heca8t466ckknvzknha2",
+         *             "headOpCid": "bafyreiaztsa2wm76vu2t7nchqnpg3nl6jkydxolikj62ywwl3geccbbeby"
+         *           },
+         *           "viewer": {
+         *             "upvoted": true
+         *           },
+         *           "space": {
+         *             "id": "did:dfos:9ctvrdn9vedda7efetrhcdakfh4cr2k",
+         *             "name": "DFOS",
+         *             "url": "https://home.dfos.com"
+         *           }
+         *         },
+         *         {
+         *           "id": "post_4vfa2h8ekt3rc9n7zd6a2f",
+         *           "slug": "notes-from-the-studio-floor",
+         *           "format": "short-post",
+         *           "title": null,
+         *           "displayTitle": "Working in public means the process is the artifact.",
+         *           "excerpt": "Working in public means the process is the artifact. This week: three false starts, one that held, and the notes we kept along the way.",
+         *           "upvoteCount": 5,
+         *           "commentCount": 2,
+         *           "isPinned": false,
+         *           "publishedAt": "2026-09-03T09:41:12.000Z",
+         *           "updatedAt": "2026-09-03T09:41:12.000Z",
+         *           "author": {
+         *             "did": "did:dfos:2228ka2thkre4ft44d73r232nfvdf2t",
+         *             "displayName": "Aron",
+         *             "username": "aron",
+         *             "avatarUrl": "https://dfos.imgix.net/media/public/24934ta9c7z8dahz7aed7r-img-5016.jpeg"
+         *           },
+         *           "viewer": {
+         *             "upvoted": false
+         *           },
+         *           "space": {
+         *             "id": "did:dfos:f3a4ncdta66627c6e2cnhhndan7k882",
+         *             "name": "POPULAR",
+         *             "url": "https://rakowwwski.dfos.com"
+         *           }
+         *         }
+         *       ],
+         *       "nextCursor": "eyJpZCI6InBvc3RfemUya2gyZDQ3dHplcmtoZXQ4MzQ4YyJ9"
+         *     }
+         */
         FeedPageOutput: {
             /** @description Page of cross-space feed items */
             items: components["schemas"]["FeedItemOutput"][];
-            /** @description Opaque cursor for the next page (null if no more results forward). Pass back verbatim as `after`; do not parse. */
+            /** @description Cursor for the next page, or null at the end. Pass back verbatim as `after`. */
             nextCursor: string | null;
-            /** @description Opaque cursor for the previous page (null if at the beginning). Optional — may be omitted on responses that do not support backward paging. Pass back verbatim as `before`; do not parse. */
+            /** @description Cursor for the previous page, or null at the start. Pass back verbatim as `before`. Omitted where backward paging is unsupported. */
             previousCursor?: string | null;
-            /** @description Total count of matching items (null if not computed). Optional — may be omitted entirely; clients must not depend on its presence. */
+            /** @description Total matching items, or null when not computed. May be omitted; do not depend on its presence. */
             totalCount?: number | null;
         };
         /**
-         * @description Thread ordering. `newest` (default) — most recently active threads first, where a thread's activity is the latest of its root and its replies. `oldest` — the reverse. `top` — most upvoted first. Open enum; only send values supported by the current contract.
+         * @description Thread ordering. `newest` (default) sorts by a thread's latest activity, `oldest` reverses it, and `top` sorts by upvotes. Open enum.
          * @example newest
          * @enum {string}
          */
         PublicCommentSort: "newest" | "oldest" | "top";
-        /** @description A comment on a post */
+        /**
+         * @description A comment on a post
+         * @example {
+         *       "id": "comment_9rze4tk2vdc7fa38nhe6c2",
+         *       "postId": "post_ze2kh2d47tzerkhet8348c",
+         *       "author": {
+         *         "did": "did:dfos:2228ka2thkre4ft44d73r232nfvdf2t",
+         *         "displayName": "Aron",
+         *         "username": "aron",
+         *         "avatarUrl": "https://dfos.imgix.net/media/public/24934ta9c7z8dahz7aed7r-img-5016.jpeg"
+         *       },
+         *       "body": "The exit-key framing is the part that clicks for me: the door exists before anyone needs it.",
+         *       "publishedAt": "2026-09-04T19:12:40.000Z",
+         *       "activityAt": "2026-09-04T20:01:05.000Z",
+         *       "upvoteCount": 3,
+         *       "replyCount": 1,
+         *       "viewer": {
+         *         "upvoted": true
+         *       }
+         *     }
+         */
         PublicCommentOutput: {
-            /**
-             * @description Comment ID. Pass it back as `parentCommentId` to walk its replies.
-             * @example post_6encc4akrze2ah9kntzd9t
-             */
+            /** @description Comment ID. Pass it back as `parentCommentId` to walk its replies. */
             id: string;
-            /** @description The ROOT post this comment belongs to — the same id the route was called with. */
+            /** @description The root post this comment belongs to. */
             postId: string;
             /** @description The comment this one replies to. Absent on a root comment. */
             parentCommentId?: string;
@@ -1297,38 +1609,82 @@ export interface components {
             publishedAt: string;
             /**
              * Format: date-time
-             * @description The instant this row is ORDERED by, and the value the cursor carries. On a root comment it is the thread's last activity — the later of the comment's own publication and its most recent reply — so an active thread sorts ahead of an older one under `newest`. On a reply it is the reply's own `publishedAt`.
+             * @description The ordering key the cursor carries. On a root comment, the later of its own publication and its most recent reply; on a reply, its own `publishedAt`.
              */
             activityAt: string;
             /** @description Number of upvotes on the comment */
             upvoteCount: number;
             /** @description Number of replies to this comment. Always 0 on a reply. */
             replyCount: number;
-            /** @description The authenticated caller's own relationship to this comment. This route is always authenticated, so the block is always present. */
+            /** @description The caller's own relationship to this comment. Always present on this route. */
             viewer?: {
                 /** @description Whether the authenticated caller has upvoted this comment. */
                 upvoted: boolean;
             };
         };
-        /** @description A cursor-paginated page of post comments */
+        /**
+         * @description A cursor-paginated page of post comments
+         * @example {
+         *       "items": [
+         *         {
+         *           "id": "comment_9rze4tk2vdc7fa38nhe6c2",
+         *           "postId": "post_ze2kh2d47tzerkhet8348c",
+         *           "author": {
+         *             "did": "did:dfos:2228ka2thkre4ft44d73r232nfvdf2t",
+         *             "displayName": "Aron",
+         *             "username": "aron",
+         *             "avatarUrl": "https://dfos.imgix.net/media/public/24934ta9c7z8dahz7aed7r-img-5016.jpeg"
+         *           },
+         *           "body": "The exit-key framing is the part that clicks for me: the door exists before anyone needs it.",
+         *           "publishedAt": "2026-09-04T19:12:40.000Z",
+         *           "activityAt": "2026-09-04T20:01:05.000Z",
+         *           "upvoteCount": 3,
+         *           "replyCount": 1,
+         *           "viewer": {
+         *             "upvoted": true
+         *           }
+         *         }
+         *       ],
+         *       "nextCursor": null,
+         *       "previousCursor": null,
+         *       "totalCount": 5
+         *     }
+         */
         PublicCommentPageOutput: {
             /** @description Page of comments */
             items: components["schemas"]["PublicCommentOutput"][];
-            /** @description Opaque cursor for the next page (null if no more results forward). Pass back verbatim as `after`; do not parse. */
+            /** @description Cursor for the next page, or null at the end. Pass back verbatim as `after`. */
             nextCursor: string | null;
-            /** @description Opaque cursor for the previous page (null if at the beginning). Optional — may be omitted on responses that do not support backward paging. Pass back verbatim as `before`; do not parse. */
+            /** @description Cursor for the previous page, or null at the start. Pass back verbatim as `before`. Omitted where backward paging is unsupported. */
             previousCursor?: string | null;
-            /** @description Total count of matching items (null if not computed). Optional — may be omitted entirely; clients must not depend on its presence. */
+            /** @description Total matching items, or null when not computed. May be omitted; do not depend on its presence. */
             totalCount?: number | null;
         };
-        /** @description A comment, as returned by a write */
+        /**
+         * @description A comment, as returned by a write
+         * @example {
+         *       "id": "comment_d6ah3f9rkt2ez48vc7n4rc",
+         *       "postId": "post_ze2kh2d47tzerkhet8348c",
+         *       "parentCommentId": "comment_9rze4tk2vdc7fa38nhe6c2",
+         *       "author": {
+         *         "did": "did:dfos:z8zt7ecn9h8n782kae3k796crva2c73",
+         *         "displayName": "Brandon",
+         *         "username": "bvalosek",
+         *         "avatarUrl": "https://dfos.imgix.net/media/public/ekceek9z64vz4cavrzr7v2-lil-robo-pfp.png"
+         *       },
+         *       "body": "Same. That and origin binding running in both directions.",
+         *       "publishedAt": "2026-09-04T20:01:05.000Z",
+         *       "upvoteCount": 0,
+         *       "replyCount": 0,
+         *       "viewer": {
+         *         "upvoted": false
+         *       }
+         *     }
+         */
         PublicCommentWriteOutput: {
-            /**
-             * @description Comment ID. Pass it back as `parentCommentId` to walk its replies.
-             * @example post_6encc4akrze2ah9kntzd9t
-             */
+            /** @description Comment ID. Pass it back as `parentCommentId` to walk its replies. */
             id: string;
-            /** @description The ROOT post this comment belongs to — the same id the route was called with. */
+            /** @description The root post this comment belongs to. */
             postId: string;
             /** @description The comment this one replies to. Absent on a root comment. */
             parentCommentId?: string;
@@ -1345,165 +1701,208 @@ export interface components {
             upvoteCount: number;
             /** @description Number of replies to this comment. Always 0 on a reply. */
             replyCount: number;
-            /** @description The authenticated caller's own relationship to this comment. This route is always authenticated, so the block is always present. */
+            /** @description The caller's own relationship to this comment. Always present on this route. */
             viewer?: {
                 /** @description Whether the authenticated caller has upvoted this comment. */
                 upvoted: boolean;
             };
         };
-        /** @description Upvote state after a toggle */
+        /**
+         * @description Upvote state after a toggle
+         * @example {
+         *       "upvoted": true,
+         *       "upvoteCount": 15
+         *     }
+         */
         PublicUpvoteStateOutput: {
-            /** @description Whether the granting user's upvote is on AFTER this call. `PUT` answers `true` and `DELETE` answers `false`, including when the call changed nothing. */
+            /** @description Whether the caller's upvote is on after this call. `PUT` answers `true` and `DELETE` `false`, including when nothing changed. */
             upvoted: boolean;
-            /** @description Upvote count on the post or comment after this call */
+            /** @description Upvote count after this call */
             upvoteCount: number;
         };
-        /** @description Confirmation that the content was deleted */
+        /**
+         * @description Confirmation that the content was deleted
+         * @example {
+         *       "deleted": true
+         *     }
+         */
         PublicDeletedOutput: {
             /**
-             * @description Always `true`. A failed delete is an error status, never this body.
+             * @description Always `true`; a failed delete returns an error status.
              * @constant
              */
             deleted: true;
         };
-        /** @description A page in a space public page list */
+        /**
+         * @description A page in a space's page list
+         * @example {
+         *       "id": "page_c7dnfhc3zn2eh7frrc3nhc",
+         *       "slug": "about",
+         *       "title": "About",
+         *       "sortOrder": 0,
+         *       "updatedAt": "2026-07-22T13:12:02.748Z"
+         *     }
+         */
         PublicPageSummaryOutput: {
-            /**
-             * @description Stable page entity id. Store this identifier; the slug may change.
-             * @example page_6encc4akrze2ah9kntzd9t
-             */
+            /** @description Stable page id. Prefer it to the slug. */
             id: string;
-            /**
-             * @description Mutable page slug alias (accepted as `{page}` on the single-page route)
-             * @example about
-             */
+            /** @description Mutable slug alias. */
             slug: string;
-            /**
-             * @description Page title
-             * @example About this space
-             */
+            /** @description Page title. */
             title: string;
-            /** @description Flat ordering within the space (ascending); the list is pre-sorted */
+            /** @description Ascending sort position. */
             sortOrder: number;
             /**
              * Format: date-time
-             * @description When the page was last updated (ISO 8601 UTC)
+             * @description Last update (ISO 8601 UTC).
              */
             updatedAt: string;
         };
-        /** @description Full public page content */
+        /**
+         * @description Full page content
+         * @example {
+         *       "id": "page_c7dnfhc3zn2eh7frrc3nhc",
+         *       "slug": "about",
+         *       "title": "About",
+         *       "body": "![dfos](attachment://media_9tnfvccf6t372vdnv43ftv)DFOS is a tool for making worlds of your own.\n\nA DFOS can be a community, publication, studio, institution, business, archive, scene, private internet, or something that doesn’t have a name yet.\n\nIt can be public or private. Free or paid.",
+         *       "bodyMedia": [
+         *         {
+         *           "id": "media_9tnfvccf6t372vdnv43ftv",
+         *           "filename": "dfos.png",
+         *           "url": "https://dfos.imgix.net/media/public/9tnfvccf6t372vdnv43ftv-dfos.png",
+         *           "contentType": "image/png",
+         *           "contentLength": 7045192,
+         *           "width": 2729,
+         *           "height": 2129,
+         *           "blurHash": "eIHLC@.7~q%MM|?bsmS5xu%MMwS24TE1oz.8xat7W=M{%Naxt7j]RP"
+         *         }
+         *       ],
+         *       "sortOrder": 0,
+         *       "updatedAt": "2026-07-22T13:12:02.748Z"
+         *     }
+         */
         PublicPageOutput: {
-            /**
-             * @description Stable page entity id. Store this identifier; the slug may change.
-             * @example page_6encc4akrze2ah9kntzd9t
-             */
+            /** @description Stable page id. */
             id: string;
-            /**
-             * @description Mutable page slug alias
-             * @example about
-             */
+            /** @description Mutable slug alias. */
             slug: string;
-            /**
-             * @description Page title
-             * @example About this space
-             */
+            /** @description Page title. */
             title: string;
-            /** @description Page content body (markdown). Inline media appears as `attachment://<mediaId>` tokens — resolve each against `bodyMedia` by id. */
+            /** @description Markdown body, or null. Inline media appears as `attachment://<mediaId>`; resolve against `bodyMedia`. */
             body: string | null;
-            /** @description Page cover image, when present */
+            /** @description Cover image. */
             cover?: components["schemas"]["PublicMediaOutput"];
-            /** @description Media objects referenced inline in the page body markdown */
+            /** @description Media referenced inline in `body`. */
             bodyMedia?: components["schemas"]["PublicMediaOutput"][];
-            /** @description Flat ordering within the space (ascending) */
+            /** @description Ascending sort position. */
             sortOrder: number;
             /**
              * Format: date-time
-             * @description When the page was last updated (ISO 8601 UTC)
+             * @description Last update (ISO 8601 UTC).
              */
             updatedAt: string;
         };
-        /** @description A cursor-paginated page of public pages */
+        /**
+         * @description A cursor-paginated list of pages
+         * @example {
+         *       "items": [
+         *         {
+         *           "id": "page_c7dnfhc3zn2eh7frrc3nhc",
+         *           "slug": "about",
+         *           "title": "About",
+         *           "sortOrder": 0,
+         *           "updatedAt": "2026-07-22T13:12:02.748Z"
+         *         }
+         *       ],
+         *       "nextCursor": null,
+         *       "previousCursor": null,
+         *       "totalCount": 1
+         *     }
+         */
         PublicPagePageOutput: {
             /** @description Page of public pages */
             items: components["schemas"]["PublicPageSummaryOutput"][];
-            /** @description Opaque cursor for the next page (null if no more results forward). Pass back verbatim as `after`; do not parse. */
+            /** @description Cursor for the next page, or null at the end. Pass back verbatim as `after`. */
             nextCursor: string | null;
-            /** @description Opaque cursor for the previous page (null if at the beginning). Optional — may be omitted on responses that do not support backward paging. Pass back verbatim as `before`; do not parse. */
+            /** @description Cursor for the previous page, or null at the start. Pass back verbatim as `before`. Omitted where backward paging is unsupported. */
             previousCursor?: string | null;
-            /** @description Total count of matching items (null if not computed). Optional — may be omitted entirely; clients must not depend on its presence. */
+            /** @description Total matching items, or null when not computed. May be omitted; do not depend on its presence. */
             totalCount?: number | null;
         };
-        /** @description A public topic */
+        /**
+         * @description A public topic
+         * @example {
+         *       "id": "topic_6c2efd472dvt8rf9k4ftcc",
+         *       "name": "DFOS Blog",
+         *       "description": "Announcements, product notes, and essays from the DFOS team."
+         *     }
+         */
         PublicTopicOutput: {
-            /**
-             * @description Topic ID (use as the `topic` filter on the posts listing)
-             * @example topic_6encc4akrze2ah9kntzd9t
-             */
+            /** @description Topic ID — pass it as the `topic` filter on the posts listing */
             id: string;
-            /**
-             * @description Topic name
-             * @example Announcements
-             */
+            /** @description Topic name */
             name: string;
-            /**
-             * @description Topic description
-             * @example News and updates from the community.
-             */
+            /** @description Topic description */
             description: string | null;
         };
         /**
-         * @description What the event is: `attend` (people show up — a session, a call, a party) or `update` (the space will publish something on this date). Open enum — treat an unrecognized value as a generic event.
+         * @description `attend` (people show up) or `update` (the space publishes something that day). Open enum.
          * @example attend
          * @enum {string}
          */
         PublicEventType: "update" | "attend";
         /**
-         * @description How an `attend` event happens: `call` (video/audio call), `place` (a physical location), or `chat` (in the space itself). Presentational only, and null on `update` events. Open enum — treat an unrecognized value as unspecified.
+         * @description How an `attend` event happens: `call` (video or audio), `place` (a physical location), or `chat` (in the space itself). Presentational only, and null on `update` events. Open enum.
          * @example place
          * @enum {string}
          */
         PublicEventMode: "call" | "place" | "chat";
-        /** @description The space an item belongs to */
+        /**
+         * @description The space an item belongs to
+         * @example {
+         *       "id": "space_vnzfk7hth9vadc3daahd48",
+         *       "did": "did:dfos:9ctvrdn9vedda7efetrhcdakfh4cr2k",
+         *       "domain": "home",
+         *       "displayName": "DFOS",
+         *       "avatarUrl": "https://dfos.imgix.net/media/public/8e87h8c37f2vz3v6h7h3at-frame-143726546.png"
+         *     }
+         */
         PublicSpaceRefOutput: {
-            /**
-             * @description Space short ID — canonical and stable.
-             * @example space_6encc4akrze2ah9kntzd9t
-             */
+            /** @description Space short ID — canonical and stable. */
             id: string;
             did: components["schemas"]["ProtocolDid"];
-            /** @description Effective subdomain — custom domain if set, otherwise the normalized `space-{id}` form. A mutable alias; the `id` and `did` are canonical. */
+            /** @description Effective subdomain (custom domain if set, else `space-{id}`). A mutable alias; `id` and `did` are canonical. */
             domain: string;
             /** @description Space display name */
             displayName: string | null;
-            /** @description Resolved public CDN URL for the space avatar, or null */
+            /** @description Public CDN URL for the space avatar, or null */
             avatarUrl: string | null;
         };
-        /** @description A purchasable price tier for a public product */
+        /**
+         * @description A purchasable price tier for a public product
+         * @example {
+         *       "id": "pprice_97hfv7rcea93267z8t677d",
+         *       "type": "one_time",
+         *       "amountCents": 1000,
+         *       "currency": "usd"
+         *     }
+         */
         PublicProductPriceOutput: {
-            /**
-             * @description Stable price-tier id. Identifies which tier a purchase is for when a product offers more than one.
-             * @example pprice_6encc4akrze2ah9kntzd9t
-             */
+            /** @description Stable price-tier id. Names which tier a purchase is for. */
             id: string;
             /**
-             * @description Pricing model. `one_time` is a fixed price; `pwyw` lets the buyer choose an amount at or above the floor; `recurring` bills on the stated `interval`. Open enum — tolerate unrecognized values.
+             * @description Pricing model. `one_time` is a fixed price, `pwyw` a buyer-chosen amount at or above the floor, `recurring` bills on `interval`. Open enum.
              * @enum {string}
              */
             type: "one_time" | "pwyw" | "recurring";
-            /**
-             * @description For `one_time`, the price. For `pwyw`, the MINIMUM the buyer may pay (0 means a free floor).
-             * @example 1000
-             */
+            /** @description For `one_time`, the price. For `pwyw`, the minimum the buyer may pay (0 is a free floor). */
             amountCents: number;
             /**
-             * @description Suggested amount for a `pwyw` price, to prefill a buyer amount input. Absent when there is no suggestion, and always absent for `one_time`.
+             * @description Amount to prefill for a `pwyw` price. Absent for other price types and when there is no suggestion.
              * @example 1500
              */
             suggestedCents?: number;
-            /**
-             * @description ISO 4217 currency code, lowercase
-             * @example usd
-             */
+            /** @description ISO 4217 currency code, lowercase */
             currency: string;
             /**
              * @description Billing cadence for a `recurring` price. Absent for `one_time` and `pwyw`.
@@ -1511,349 +1910,634 @@ export interface components {
              */
             interval?: "month" | "year";
             /**
-             * @description Number of `interval` units between billings (1 = every month/year). Always present alongside `interval`; absent for `one_time` and `pwyw`.
+             * @description Number of `interval` units between billings. Present with `interval`, absent otherwise.
              * @example 1
              */
             intervalCount?: number;
         };
-        /** @description A ticket on sale for a public event */
+        /**
+         * @description A ticket on sale
+         * @example {
+         *       "id": "sprod_ra73keekz9f22k7889ren7",
+         *       "slug": "the-dark-forest-anthology-of-the-internet-digital",
+         *       "name": "The Dark Forest Anthology of the Internet (digital)",
+         *       "prices": [
+         *         {
+         *           "id": "pprice_97hfv7rcea93267z8t677d",
+         *           "type": "one_time",
+         *           "amountCents": 1000,
+         *           "currency": "usd"
+         *         }
+         *       ],
+         *       "isSoldOut": false,
+         *       "purchasable": true
+         *     }
+         */
         PublicEventTicketOutput: {
-            /**
-             * @description Store product id — the same `id` the products routes return. Stable; store this rather than the slug.
-             * @example sprod_6encc4akrze2ah9kntzd9t
-             */
+            /** @description Store product id. Prefer it to the slug. */
             id: string;
             /**
-             * @description The product's public purchase-page slug (the `/p/{slug}` segment on the space site). Mutable — changing it breaks old links with no redirect; store the `id`.
-             * @example softr-ticket
+             * @description The product's public purchase-page slug (`/p/{slug}` on the space site). A mutable alias; `id` is canonical.
+             * @example the-dark-forest-anthology-of-the-internet-digital
              */
             slug: string;
-            /**
-             * @description Ticket name
-             * @example General admission
-             */
+            /** @description Ticket name. */
             name: string;
-            /** @description ACTIVE price tiers for this ticket — the identical shape and the identical selection the products routes emit for the same product (archived tiers never appear). One-time and pay-what-you-want only; a ticket never carries a recurring price. */
+            /** @description Active price tiers, as the products routes emit them. One-time and pay-what-you-want only. */
             prices: components["schemas"]["PublicProductPriceOutput"][];
-            /** @description True when this ticket had limited capacity and it is exhausted. Advisory — availability is re-checked at purchase. */
+            /** @description True when limited capacity is exhausted. Re-checked at purchase. */
             isSoldOut: boolean;
-            /** @description Whether a purchase can be STARTED right now — false when the platform payment rail is paused or the ticket has no completable price tier. Render an unavailable state rather than a dead buy button. Independent of `isSoldOut`, which has its own message. Same meaning, and the same derivation, as `purchasable` on the products routes. */
+            /** @description Whether a purchase can be started now, independent of `isSoldOut`. False when the payment rail is paused or no price tier is completable. */
             purchasable: boolean;
         };
-        /** @description One occurrence of a public event */
+        /**
+         * @description One occurrence of a public event
+         * @example {
+         *       "id": "evt_ehrrkh8thkkdh6c383zkf9",
+         *       "seriesId": "evt_ehrrkh8thkkdh6c383zkf9",
+         *       "recurrenceId": "2026-09-09",
+         *       "space": {
+         *         "id": "space_vnzfk7hth9vadc3daahd48",
+         *         "did": "did:dfos:9ctvrdn9vedda7efetrhcdakfh4cr2k",
+         *         "domain": "home",
+         *         "displayName": "DFOS",
+         *         "avatarUrl": "https://dfos.imgix.net/media/public/8e87h8c37f2vz3v6h7h3at-frame-143726546.png"
+         *       },
+         *       "title": "DFOS product weekly",
+         *       "description": "A weekly peak of the inner forest of DFOS. What we're working on, what we're thinking about, what's next.",
+         *       "location": null,
+         *       "type": "update",
+         *       "mode": null,
+         *       "url": null,
+         *       "isAllDay": true,
+         *       "startsAt": null,
+         *       "endsAt": null,
+         *       "startDate": "2026-09-09",
+         *       "endDate": null,
+         *       "localStart": null,
+         *       "timeZone": null,
+         *       "interestCount": 0,
+         *       "requiresTicket": false,
+         *       "tickets": [],
+         *       "cover": {
+         *         "id": "media_r22avnnrfch9ee62nhzkcn",
+         *         "filename": "cover.png",
+         *         "url": "https://dfos.imgix.net/media/public/r22avnnrfch9ee62nhzkcn-cover.png",
+         *         "contentType": "image/png",
+         *         "contentLength": 114085,
+         *         "width": 3000,
+         *         "height": 2100,
+         *         "blurHash": "et5^}ckUX|kUYsX|fji~fQj[P1a{nTayoyt%j[W-j[V[t7j[ayfja3"
+         *       }
+         *     }
+         */
         PublicEventOutput: {
-            /**
-             * @description Event ID. Identifies the EVENT; a recurring event yields one item per occurrence, so use `(seriesId, recurrenceId)` to address a specific one.
-             * @example evt_6encc4akrze2ah9kntzd9t
-             */
+            /** @description Event id. A recurring event yields one item per occurrence; address one with `(seriesId, recurrenceId)`. */
             id: string;
-            /**
-             * @description The series this occurrence belongs to — the same value as `id` today. Half of the occurrence identity pair.
-             * @example evt_6encc4akrze2ah9kntzd9t
-             */
+            /** @description The series this occurrence belongs to; same value as `id` today. */
             seriesId: string;
-            /**
-             * @description RFC 5545 RECURRENCE-ID: this occurrence's stable identity within its series — its local wall-time (`YYYY-MM-DDTHH:MM:SS`) or, for an all-day event, its date (`YYYY-MM-DD`). Stable across DST; never identify an occurrence by its resolved UTC instant.
-             * @example 2026-08-15T19:00:00
-             */
+            /** @description This occurrence's identity within its series (RFC 5545 RECURRENCE-ID): local wall-time `YYYY-MM-DDTHH:MM:SS`, or `YYYY-MM-DD` when all-day. Stable across DST. */
             recurrenceId: string;
             space: components["schemas"]["PublicSpaceRefOutput"];
-            /**
-             * @description Event title
-             * @example Listening session
-             */
+            /** @description Event title. */
             title: string;
-            /** @description Event description (plain text), or null */
+            /** @description Plain-text description, or null. */
             description: string | null;
-            /** @description Free-text location as the organizer wrote it, or null */
+            /** @description Location as the organizer wrote it, or null. */
             location: string | null;
             type: components["schemas"]["PublicEventType"];
-            /** @description Attend-event flavor; null when unspecified or on an `update` event. */
+            /** @description Attend-event flavor. Null when unspecified or on an `update` event. */
             mode: components["schemas"]["PublicEventMode"] | null;
-            /** @description Waypoint URL the organizer attached (a call link, a ticket page), or null. Arbitrary organizer-supplied content — treat it as untrusted. */
+            /** @description URL the organizer attached (a call link, a ticket page), or null. Treat it as untrusted. */
             url: string | null;
-            /** @description True for a date-based event: `startDate`/`endDate` carry the dates and every instant field is null. False for a timed event, where the reverse holds. */
+            /** @description True for a date-based event: `startDate`/`endDate` are set and the instant fields are null. */
             isAllDay: boolean;
             /**
-             * @description This occurrence's resolved start instant (ISO 8601 UTC). Null for an all-day event.
+             * @description This occurrence's start instant (ISO 8601 UTC). Null when all-day.
              * @example 2026-08-16T00:00:00.000Z
              */
             startsAt: string | null;
-            /** @description This occurrence's resolved end instant (ISO 8601 UTC). Null for an all-day event or an open-ended one; equal to `startsAt` for a point-in-time event. */
+            /** @description This occurrence's end instant (ISO 8601 UTC). Null when all-day or open-ended; equal to `startsAt` for a point-in-time event. */
             endsAt: string | null;
-            /**
-             * @description All-day only: this occurrence's start date (`YYYY-MM-DD`). Null for a timed event.
-             * @example 2026-08-15
-             */
+            /** @description All-day only: this occurrence's start date (`YYYY-MM-DD`). Null on a timed event. */
             startDate: string | null;
-            /** @description All-day only: EXCLUSIVE end date (`YYYY-MM-DD`) — null means a single day. Null for a timed event. */
+            /** @description All-day only: exclusive end date (`YYYY-MM-DD`). Null for a single day or a timed event. */
             endDate: string | null;
-            /** @description Timed only: this occurrence's start as local wall-clock time in `timeZone` (`YYYY-MM-DDTHH:MM:SS`) — the time the organizer actually authored. Equal to `recurrenceId` for a timed occurrence. Null for an all-day event. */
+            /** @description Timed only: this occurrence's start as wall-clock time in `timeZone`. Equal to `recurrenceId`. Null when all-day. */
             localStart: string | null;
             /**
-             * @description Timed only: the IANA zone the event was authored in — the zone `localStart` is expressed in. Null for an all-day event.
+             * @description Timed only: the IANA zone `localStart` is expressed in. Null when all-day.
              * @example America/Chicago
              */
             timeZone: string | null;
-            /** @description How many members have marked interest in the event (its RSVP count). Members only — this API cannot RSVP. */
+            /** @description How many members marked interest. */
             interestCount: number;
-            /** @description Whether attending requires buying a ticket. Always false on an `update` event. Independent of `tickets`: an event can require a ticket and still list none here, when the seller has not published a public purchase page for it. */
+            /** @description Whether attending requires a ticket. Always false on an `update` event. An event can require one and still list none in `tickets`. */
             requiresTicket: boolean;
-            /** @description Tickets on sale for this event that an anonymous caller can buy, in the order the organizer attached them. Empty when the event sells no tickets, or sells them only through pages that are not public. Viewer-independent, like everything else here — it says what is on sale, never what you already hold. */
+            /** @description Tickets on sale, in the order the organizer attached them. */
             tickets: components["schemas"]["PublicEventTicketOutput"][];
-            /** @description The cover image to render for THIS occurrence, when present: the occurrence's own cover art if the organizer set one, otherwise the event's. Always a public image with a PERMANENT unsigned URL — no `urlExpiresAt`, safe to hotlink while the event references it. */
+            /** @description This occurrence's cover image, falling back to the event's. Permanent unsigned URL, safe to hotlink. */
             cover?: components["schemas"]["PublicMediaOutput"];
         };
-        /** @description A cursor-paginated page of public event occurrences */
+        /**
+         * @description A cursor-paginated list of occurrences
+         * @example {
+         *       "items": [
+         *         {
+         *           "id": "evt_ehrrkh8thkkdh6c383zkf9",
+         *           "seriesId": "evt_ehrrkh8thkkdh6c383zkf9",
+         *           "recurrenceId": "2026-09-09",
+         *           "space": {
+         *             "id": "space_vnzfk7hth9vadc3daahd48",
+         *             "did": "did:dfos:9ctvrdn9vedda7efetrhcdakfh4cr2k",
+         *             "domain": "home",
+         *             "displayName": "DFOS",
+         *             "avatarUrl": "https://dfos.imgix.net/media/public/8e87h8c37f2vz3v6h7h3at-frame-143726546.png"
+         *           },
+         *           "title": "DFOS product weekly",
+         *           "description": "A weekly peak of the inner forest of DFOS. What we're working on, what we're thinking about, what's next.",
+         *           "location": null,
+         *           "type": "update",
+         *           "mode": null,
+         *           "url": null,
+         *           "isAllDay": true,
+         *           "startsAt": null,
+         *           "endsAt": null,
+         *           "startDate": "2026-09-09",
+         *           "endDate": null,
+         *           "localStart": null,
+         *           "timeZone": null,
+         *           "interestCount": 0,
+         *           "requiresTicket": false,
+         *           "tickets": [],
+         *           "cover": {
+         *             "id": "media_r22avnnrfch9ee62nhzkcn",
+         *             "filename": "cover.png",
+         *             "url": "https://dfos.imgix.net/media/public/r22avnnrfch9ee62nhzkcn-cover.png",
+         *             "contentType": "image/png",
+         *             "contentLength": 114085,
+         *             "width": 3000,
+         *             "height": 2100,
+         *             "blurHash": "et5^}ckUX|kUYsX|fji~fQj[P1a{nTayoyt%j[W-j[V[t7j[ayfja3"
+         *           }
+         *         },
+         *         {
+         *           "id": "evt_ehrrkh8thkkdh6c383zkf9",
+         *           "seriesId": "evt_ehrrkh8thkkdh6c383zkf9",
+         *           "recurrenceId": "2026-09-16",
+         *           "space": {
+         *             "id": "space_vnzfk7hth9vadc3daahd48",
+         *             "did": "did:dfos:9ctvrdn9vedda7efetrhcdakfh4cr2k",
+         *             "domain": "home",
+         *             "displayName": "DFOS",
+         *             "avatarUrl": "https://dfos.imgix.net/media/public/8e87h8c37f2vz3v6h7h3at-frame-143726546.png"
+         *           },
+         *           "title": "DFOS product weekly",
+         *           "description": "A weekly peak of the inner forest of DFOS. What we're working on, what we're thinking about, what's next.",
+         *           "location": null,
+         *           "type": "update",
+         *           "mode": null,
+         *           "url": null,
+         *           "isAllDay": true,
+         *           "startsAt": null,
+         *           "endsAt": null,
+         *           "startDate": "2026-09-16",
+         *           "endDate": null,
+         *           "localStart": null,
+         *           "timeZone": null,
+         *           "interestCount": 0,
+         *           "requiresTicket": false,
+         *           "tickets": [],
+         *           "cover": {
+         *             "id": "media_r22avnnrfch9ee62nhzkcn",
+         *             "filename": "cover.png",
+         *             "url": "https://dfos.imgix.net/media/public/r22avnnrfch9ee62nhzkcn-cover.png",
+         *             "contentType": "image/png",
+         *             "contentLength": 114085,
+         *             "width": 3000,
+         *             "height": 2100,
+         *             "blurHash": "et5^}ckUX|kUYsX|fji~fQj[P1a{nTayoyt%j[W-j[V[t7j[ayfja3"
+         *           }
+         *         }
+         *       ],
+         *       "nextCursor": "eyJpZCI6InBvc3RfemUya2gyZDQ3dHplcmtoZXQ4MzQ4YyJ9",
+         *       "previousCursor": null
+         *     }
+         */
         PublicEventPageOutput: {
             /** @description Page of public event occurrences */
             items: components["schemas"]["PublicEventOutput"][];
-            /** @description Opaque cursor for the next page (null if no more results forward). Pass back verbatim as `after`; do not parse. */
+            /** @description Cursor for the next page, or null at the end. Pass back verbatim as `after`. */
             nextCursor: string | null;
-            /** @description Opaque cursor for the previous page (null if at the beginning). Optional — may be omitted on responses that do not support backward paging. Pass back verbatim as `before`; do not parse. */
+            /** @description Cursor for the previous page, or null at the start. Pass back verbatim as `before`. Omitted where backward paging is unsupported. */
             previousCursor?: string | null;
-            /** @description Total count of matching items (null if not computed). Optional — may be omitted entirely; clients must not depend on its presence. */
+            /** @description Total matching items, or null when not computed. May be omitted; do not depend on its presence. */
             totalCount?: number | null;
         };
-        /** @description A cursor-paginated page of public topics */
+        /**
+         * @description A cursor-paginated page of public topics
+         * @example {
+         *       "items": [
+         *         {
+         *           "id": "topic_6c2efd472dvt8rf9k4ftcc",
+         *           "name": "DFOS Blog",
+         *           "description": "Announcements, product notes, and essays from the DFOS team."
+         *         }
+         *       ],
+         *       "nextCursor": null,
+         *       "previousCursor": null,
+         *       "totalCount": 1
+         *     }
+         */
         PublicTopicPageOutput: {
             /** @description Page of public topics */
             items: components["schemas"]["PublicTopicOutput"][];
-            /** @description Opaque cursor for the next page (null if no more results forward). Pass back verbatim as `after`; do not parse. */
+            /** @description Cursor for the next page, or null at the end. Pass back verbatim as `after`. */
             nextCursor: string | null;
-            /** @description Opaque cursor for the previous page (null if at the beginning). Optional — may be omitted on responses that do not support backward paging. Pass back verbatim as `before`; do not parse. */
+            /** @description Cursor for the previous page, or null at the start. Pass back verbatim as `before`. Omitted where backward paging is unsupported. */
             previousCursor?: string | null;
-            /** @description Total count of matching items (null if not computed). Optional — may be omitted entirely; clients must not depend on its presence. */
+            /** @description Total matching items, or null when not computed. May be omitted; do not depend on its presence. */
             totalCount?: number | null;
         };
-        /** @description The release a product belongs to */
+        /**
+         * @description The release a product belongs to
+         * @example {
+         *       "slug": "the-dark-forest-anthology-of-the-internet",
+         *       "name": "The Dark Forest Anthology of the Internet"
+         *     }
+         */
         PublicProductReleaseRefOutput: {
-            /**
-             * @description The release's public page slug — hand it to `GET /spaces/{space}/releases/{slug}` for the full page. Mutable, like every slug here.
-             * @example blue-record
-             */
+            /** @description The release's public page slug. Pass it to `GET /spaces/{space}/releases/{slug}`. */
             slug: string;
-            /**
-             * @description Release name
-             * @example Blue Record
-             */
+            /** @description Release name */
             name: string;
         };
-        /** @description A store product with a public purchase page */
+        /**
+         * @description A store product with a public purchase page
+         * @example {
+         *       "id": "sprod_ra73keekz9f22k7889ren7",
+         *       "slug": "the-dark-forest-anthology-of-the-internet-digital",
+         *       "name": "The Dark Forest Anthology of the Internet (digital)",
+         *       "description": "A book about how to survive on the internet. It’s about the cozy web, the dark web, the dark forest, the clear net, the dark net, and a new social world emerging around us. This is the Dark Forest Anthology of the Internet.",
+         *       "kind": "digital",
+         *       "image": {
+         *         "id": "media_a9e9r767ca9frz7dvrfvna",
+         *         "filename": "GpE09OWasAAw1BX.jpeg",
+         *         "url": "https://dfos.imgix.net/media/public/a9e9r767ca9frz7dvrfvna-gpe09owasaaw1bx.jpeg",
+         *         "contentType": "image/jpeg",
+         *         "contentLength": 2468014,
+         *         "width": 3200,
+         *         "height": 3200,
+         *         "blurHash": "e$P43Mxs|Fw]K4r^oeaLaeba,;n*JTf6snr?j?kCoLayv~f6OEj]n%"
+         *       },
+         *       "prices": [
+         *         {
+         *           "id": "pprice_97hfv7rcea93267z8t677d",
+         *           "type": "one_time",
+         *           "amountCents": 1000,
+         *           "currency": "usd"
+         *         }
+         *       ],
+         *       "purchaseGrantsMembership": true,
+         *       "available": null,
+         *       "isSoldOut": false,
+         *       "purchasable": true,
+         *       "sortOrder": 0,
+         *       "release": {
+         *         "slug": "the-dark-forest-anthology-of-the-internet",
+         *         "name": "The Dark Forest Anthology of the Internet"
+         *       },
+         *       "createdAt": "2026-08-08T13:24:36.433Z"
+         *     }
+         */
         PublicProductOutput: {
-            /**
-             * @description Stable store-product id. Store this identifier; the slug may change.
-             * @example sprod_6encc4akrze2ah9kntzd9t
-             */
+            /** @description Stable store-product id. */
             id: string;
             /**
-             * @description The product's public purchase-page slug (the `/p/{slug}` segment on the space site). Mutable — changing it breaks old links with no redirect; store the `id`.
-             * @example softr-ticket
+             * @description The product's public purchase-page slug (`/p/{slug}` on the space site). A mutable alias; `id` is canonical.
+             * @example the-dark-forest-anthology-of-the-internet-digital
              */
             slug: string;
-            /**
-             * @description Product name
-             * @example SOFTR Ticket
-             */
+            /** @description Product name */
             name: string;
-            /** @description Seller-authored plain-text description. Newlines are significant; render with preserved whitespace. */
+            /** @description Plain-text description. Newlines are significant. */
             description: string | null;
             /**
-             * @description What the product delivers. Open enum — treat an unrecognized value as an opaque string.
+             * @description What the product delivers. Open enum.
              * @enum {string}
              */
             kind: "digital" | "physical";
-            /** @description Hero image, when the product has one. Always a PUBLIC, permanently-hosted CDN image — this endpoint never emits a signed or expiring URL. */
+            /** @description Hero image, when the product has one. Always a permanent public CDN URL. */
             image?: components["schemas"]["PublicMediaOutput"];
-            /** @description Every purchasable price tier, one-time and recurring alike. Multiple tiers are normal (e.g. a one-time price alongside a monthly subscription). */
+            /** @description Every purchasable price tier. */
             prices: components["schemas"]["PublicProductPriceOutput"][];
-            /** @description Whether buying this product makes the buyer a member of the space. A PRODUCT fact, identical for every caller — it says what the purchase does, not what any particular viewer would get from it (a caller who is already a member gains nothing new, and this field does not know or say so). */
+            /** @description Whether buying this product makes the buyer a member of the space. */
             purchaseGrantsMembership: boolean;
-            /** @description Remaining stock, or null when the product has unlimited stock. Advisory only — availability is re-checked at purchase. */
+            /** @description Remaining stock, or null when unlimited. Advisory; stock is re-checked at purchase. */
             available: number | null;
             /** @description True when limited stock is exhausted (`available` <= 0). */
             isSoldOut: boolean;
-            /** @description Whether a purchase can be STARTED right now. False when the platform payment rail is paused or the product has no completable price tier — render an unavailable state rather than a dead buy button. Independent of `isSoldOut`, which has its own message. */
+            /** @description Whether a purchase can be started right now. False when the payment rail is paused or no price tier is completable. */
             purchasable: boolean;
-            /**
-             * @description This product's position in the space's public product list, counting from 0 — LOWER SORTS FIRST. Dense and contiguous across the whole list (0, 1, 2, …) and meaningful only within one space; products with no public page are not counted, so this reveals nothing about a space's unpublished catalog. The index is ordered by this field. It is a POSITION, not a stable identifier — publishing, unpublishing, or reordering shifts it, so never store it as a key.
-             * @example 0
-             */
+            /** @description Position in the space's public product list, from 0, lowest first. Dense over publicly-visible products only, and not a stable key. */
             sortOrder: number;
-            /** @description The next upcoming PUBLIC event occurrence this product admits, when one exists — a ticket product’s backlink to what it sells entry to. SINGULAR BY DESIGN: a product may admit several events (a season pass), and this names the SOONEST upcoming occurrence across all of them — the one date a purchase page should send a buyer to — never a claim that only one event is admitted. Read the events namespace for the full relation. Absent when the product is not a ticket, when its ticket binding has been detached, when the event it admits is not publicly visible, and when no occurrence falls inside the window this API serves (the same ~1 year the events routes look ahead). */
+            /** @description The soonest upcoming public event occurrence this product admits. A product may admit several; read the events namespace for the full relation. Absent when the product is not a ticket, its binding is detached, the event is not public, or no occurrence falls in the coming year. */
             ticketFor?: {
-                /**
-                 * @description The event series this product admits — the same `seriesId` the events namespace emits.
-                 * @example evt_6encc4akrze2ah9kntzd9t
-                 */
+                /** @description The event series this product admits. */
                 seriesId: string;
-                /**
-                 * @description RFC 5545 RECURRENCE-ID of the NEXT upcoming occurrence: its local wall-time (`YYYY-MM-DDTHH:MM:SS`), or its date (`YYYY-MM-DD`) for an all-day event. Byte-identical to the events namespace's value for the same occurrence.
-                 * @example 2026-08-15T19:00:00
-                 */
+                /** @description RFC 5545 RECURRENCE-ID of the next upcoming occurrence: its local wall-time (`YYYY-MM-DDTHH:MM:SS`), or its date (`YYYY-MM-DD`) for an all-day event. */
                 recurrenceId: string;
-                /**
-                 * @description That occurrence's resolved start instant (ISO 8601 UTC). Null for an all-day event.
-                 * @example 2026-08-16T00:00:00.000Z
-                 */
+                /** @description The occurrence's start instant (ISO 8601 UTC). Null for an all-day event. */
                 startsAt: string | null;
-                /**
-                 * @description All-day only: that occurrence's start date (`YYYY-MM-DD`). Null for a timed event.
-                 * @example 2026-08-15
-                 */
+                /** @description All-day only: the occurrence's start date (`YYYY-MM-DD`). Null for a timed event. */
                 startDate: string | null;
             };
-            /** @description The release this product belongs to, when a publicly-visible one holds it — a one-line context chip, not a projection of the release. SINGULAR: a product composed into several releases carries the EARLIEST-published public one (ties broken by release id). Absent when the product is in no release, and equally absent when every release holding it is unpublished — the two are deliberately indistinguishable. Read `GET /spaces/{space}/releases/{slug}` for the release itself. */
+            /** @description The release this product belongs to, when a public one holds it. A product in several releases carries the earliest-published public one. */
             release?: components["schemas"]["PublicProductReleaseRefOutput"];
             /**
              * Format: date-time
-             * @description When the product was created (ISO 8601 UTC). The cross-space index `GET /products` is ordered by this value, newest first. It is the row's own creation stamp — NOT "when it was published", which this surface does not record, and not a position in any catalog.
-             * @example 2026-09-01T17:00:00.000Z
+             * @description When the product was created (ISO 8601 UTC). `GET /products` orders by this value, newest first.
              */
             createdAt: string;
         };
-        /** @description A cursor-paginated page of public products */
+        /**
+         * @description A page of public products
+         * @example {
+         *       "items": [
+         *         {
+         *           "id": "sprod_ra73keekz9f22k7889ren7",
+         *           "slug": "the-dark-forest-anthology-of-the-internet-digital",
+         *           "name": "The Dark Forest Anthology of the Internet (digital)",
+         *           "description": "A book about how to survive on the internet. It’s about the cozy web, the dark web, the dark forest, the clear net, the dark net, and a new social world emerging around us. This is the Dark Forest Anthology of the Internet.",
+         *           "kind": "digital",
+         *           "image": {
+         *             "id": "media_a9e9r767ca9frz7dvrfvna",
+         *             "filename": "GpE09OWasAAw1BX.jpeg",
+         *             "url": "https://dfos.imgix.net/media/public/a9e9r767ca9frz7dvrfvna-gpe09owasaaw1bx.jpeg",
+         *             "contentType": "image/jpeg",
+         *             "contentLength": 2468014,
+         *             "width": 3200,
+         *             "height": 3200,
+         *             "blurHash": "e$P43Mxs|Fw]K4r^oeaLaeba,;n*JTf6snr?j?kCoLayv~f6OEj]n%"
+         *           },
+         *           "prices": [
+         *             {
+         *               "id": "pprice_97hfv7rcea93267z8t677d",
+         *               "type": "one_time",
+         *               "amountCents": 1000,
+         *               "currency": "usd"
+         *             }
+         *           ],
+         *           "purchaseGrantsMembership": true,
+         *           "available": null,
+         *           "isSoldOut": false,
+         *           "purchasable": true,
+         *           "sortOrder": 0,
+         *           "release": {
+         *             "slug": "the-dark-forest-anthology-of-the-internet",
+         *             "name": "The Dark Forest Anthology of the Internet"
+         *           },
+         *           "createdAt": "2026-08-08T13:24:36.433Z"
+         *         }
+         *       ],
+         *       "nextCursor": "eyJpZCI6InBvc3RfemUya2gyZDQ3dHplcmtoZXQ4MzQ4YyJ9",
+         *       "previousCursor": null,
+         *       "totalCount": 2
+         *     }
+         */
         PublicProductPageOutput: {
             /** @description Page of public products */
             items: components["schemas"]["PublicProductOutput"][];
-            /** @description Opaque cursor for the next page (null if no more results forward). Pass back verbatim as `after`; do not parse. */
+            /** @description Cursor for the next page, or null at the end. Pass back verbatim as `after`. */
             nextCursor: string | null;
-            /** @description Opaque cursor for the previous page (null if at the beginning). Optional — may be omitted on responses that do not support backward paging. Pass back verbatim as `before`; do not parse. */
+            /** @description Cursor for the previous page, or null at the start. Pass back verbatim as `before`. Omitted where backward paging is unsupported. */
             previousCursor?: string | null;
-            /** @description Total count of matching items (null if not computed). Optional — may be omitted entirely; clients must not depend on its presence. */
+            /** @description Total matching items, or null when not computed. May be omitted; do not depend on its presence. */
             totalCount?: number | null;
         };
-        /** @description A public product with the space it belongs to */
+        /**
+         * @description A public product with the space it belongs to
+         * @example {
+         *       "id": "sprod_ra73keekz9f22k7889ren7",
+         *       "slug": "the-dark-forest-anthology-of-the-internet-digital",
+         *       "name": "The Dark Forest Anthology of the Internet (digital)",
+         *       "description": "A book about how to survive on the internet. It’s about the cozy web, the dark web, the dark forest, the clear net, the dark net, and a new social world emerging around us. This is the Dark Forest Anthology of the Internet.",
+         *       "kind": "digital",
+         *       "image": {
+         *         "id": "media_a9e9r767ca9frz7dvrfvna",
+         *         "filename": "GpE09OWasAAw1BX.jpeg",
+         *         "url": "https://dfos.imgix.net/media/public/a9e9r767ca9frz7dvrfvna-gpe09owasaaw1bx.jpeg",
+         *         "contentType": "image/jpeg",
+         *         "contentLength": 2468014,
+         *         "width": 3200,
+         *         "height": 3200,
+         *         "blurHash": "e$P43Mxs|Fw]K4r^oeaLaeba,;n*JTf6snr?j?kCoLayv~f6OEj]n%"
+         *       },
+         *       "prices": [
+         *         {
+         *           "id": "pprice_97hfv7rcea93267z8t677d",
+         *           "type": "one_time",
+         *           "amountCents": 1000,
+         *           "currency": "usd"
+         *         }
+         *       ],
+         *       "purchaseGrantsMembership": true,
+         *       "available": null,
+         *       "isSoldOut": false,
+         *       "purchasable": true,
+         *       "sortOrder": 0,
+         *       "release": {
+         *         "slug": "the-dark-forest-anthology-of-the-internet",
+         *         "name": "The Dark Forest Anthology of the Internet"
+         *       },
+         *       "createdAt": "2026-08-08T13:24:36.433Z",
+         *       "space": {
+         *         "id": "space_vnzfk7hth9vadc3daahd48",
+         *         "did": "did:dfos:9ctvrdn9vedda7efetrhcdakfh4cr2k",
+         *         "domain": "home",
+         *         "displayName": "DFOS",
+         *         "avatarUrl": "https://dfos.imgix.net/media/public/8e87h8c37f2vz3v6h7h3at-frame-143726546.png"
+         *       }
+         *     }
+         */
         PublicProductFeedItemOutput: {
-            /**
-             * @description Stable store-product id. Store this identifier; the slug may change.
-             * @example sprod_6encc4akrze2ah9kntzd9t
-             */
+            /** @description Stable store-product id. */
             id: string;
             /**
-             * @description The product's public purchase-page slug (the `/p/{slug}` segment on the space site). Mutable — changing it breaks old links with no redirect; store the `id`.
-             * @example softr-ticket
+             * @description The product's public purchase-page slug (`/p/{slug}` on the space site). A mutable alias; `id` is canonical.
+             * @example the-dark-forest-anthology-of-the-internet-digital
              */
             slug: string;
-            /**
-             * @description Product name
-             * @example SOFTR Ticket
-             */
+            /** @description Product name */
             name: string;
-            /** @description Seller-authored plain-text description. Newlines are significant; render with preserved whitespace. */
+            /** @description Plain-text description. Newlines are significant. */
             description: string | null;
             /**
-             * @description What the product delivers. Open enum — treat an unrecognized value as an opaque string.
+             * @description What the product delivers. Open enum.
              * @enum {string}
              */
             kind: "digital" | "physical";
-            /** @description Hero image, when the product has one. Always a PUBLIC, permanently-hosted CDN image — this endpoint never emits a signed or expiring URL. */
+            /** @description Hero image, when the product has one. Always a permanent public CDN URL. */
             image?: components["schemas"]["PublicMediaOutput"];
-            /** @description Every purchasable price tier, one-time and recurring alike. Multiple tiers are normal (e.g. a one-time price alongside a monthly subscription). */
+            /** @description Every purchasable price tier. */
             prices: components["schemas"]["PublicProductPriceOutput"][];
-            /** @description Whether buying this product makes the buyer a member of the space. A PRODUCT fact, identical for every caller — it says what the purchase does, not what any particular viewer would get from it (a caller who is already a member gains nothing new, and this field does not know or say so). */
+            /** @description Whether buying this product makes the buyer a member of the space. */
             purchaseGrantsMembership: boolean;
-            /** @description Remaining stock, or null when the product has unlimited stock. Advisory only — availability is re-checked at purchase. */
+            /** @description Remaining stock, or null when unlimited. Advisory; stock is re-checked at purchase. */
             available: number | null;
             /** @description True when limited stock is exhausted (`available` <= 0). */
             isSoldOut: boolean;
-            /** @description Whether a purchase can be STARTED right now. False when the platform payment rail is paused or the product has no completable price tier — render an unavailable state rather than a dead buy button. Independent of `isSoldOut`, which has its own message. */
+            /** @description Whether a purchase can be started right now. False when the payment rail is paused or no price tier is completable. */
             purchasable: boolean;
-            /**
-             * @description This product's position in the space's public product list, counting from 0 — LOWER SORTS FIRST. Dense and contiguous across the whole list (0, 1, 2, …) and meaningful only within one space; products with no public page are not counted, so this reveals nothing about a space's unpublished catalog. The index is ordered by this field. It is a POSITION, not a stable identifier — publishing, unpublishing, or reordering shifts it, so never store it as a key.
-             * @example 0
-             */
+            /** @description Position in the space's public product list, from 0, lowest first. Dense over publicly-visible products only, and not a stable key. */
             sortOrder: number;
-            /** @description The next upcoming PUBLIC event occurrence this product admits, when one exists — a ticket product’s backlink to what it sells entry to. SINGULAR BY DESIGN: a product may admit several events (a season pass), and this names the SOONEST upcoming occurrence across all of them — the one date a purchase page should send a buyer to — never a claim that only one event is admitted. Read the events namespace for the full relation. Absent when the product is not a ticket, when its ticket binding has been detached, when the event it admits is not publicly visible, and when no occurrence falls inside the window this API serves (the same ~1 year the events routes look ahead). */
+            /** @description The soonest upcoming public event occurrence this product admits. A product may admit several; read the events namespace for the full relation. Absent when the product is not a ticket, its binding is detached, the event is not public, or no occurrence falls in the coming year. */
             ticketFor?: {
-                /**
-                 * @description The event series this product admits — the same `seriesId` the events namespace emits.
-                 * @example evt_6encc4akrze2ah9kntzd9t
-                 */
+                /** @description The event series this product admits. */
                 seriesId: string;
-                /**
-                 * @description RFC 5545 RECURRENCE-ID of the NEXT upcoming occurrence: its local wall-time (`YYYY-MM-DDTHH:MM:SS`), or its date (`YYYY-MM-DD`) for an all-day event. Byte-identical to the events namespace's value for the same occurrence.
-                 * @example 2026-08-15T19:00:00
-                 */
+                /** @description RFC 5545 RECURRENCE-ID of the next upcoming occurrence: its local wall-time (`YYYY-MM-DDTHH:MM:SS`), or its date (`YYYY-MM-DD`) for an all-day event. */
                 recurrenceId: string;
-                /**
-                 * @description That occurrence's resolved start instant (ISO 8601 UTC). Null for an all-day event.
-                 * @example 2026-08-16T00:00:00.000Z
-                 */
+                /** @description The occurrence's start instant (ISO 8601 UTC). Null for an all-day event. */
                 startsAt: string | null;
-                /**
-                 * @description All-day only: that occurrence's start date (`YYYY-MM-DD`). Null for a timed event.
-                 * @example 2026-08-15
-                 */
+                /** @description All-day only: the occurrence's start date (`YYYY-MM-DD`). Null for a timed event. */
                 startDate: string | null;
             };
-            /** @description The release this product belongs to, when a publicly-visible one holds it — a one-line context chip, not a projection of the release. SINGULAR: a product composed into several releases carries the EARLIEST-published public one (ties broken by release id). Absent when the product is in no release, and equally absent when every release holding it is unpublished — the two are deliberately indistinguishable. Read `GET /spaces/{space}/releases/{slug}` for the release itself. */
+            /** @description The release this product belongs to, when a public one holds it. A product in several releases carries the earliest-published public one. */
             release?: components["schemas"]["PublicProductReleaseRefOutput"];
             /**
              * Format: date-time
-             * @description When the product was created (ISO 8601 UTC). The cross-space index `GET /products` is ordered by this value, newest first. It is the row's own creation stamp — NOT "when it was published", which this surface does not record, and not a position in any catalog.
-             * @example 2026-09-01T17:00:00.000Z
+             * @description When the product was created (ISO 8601 UTC). `GET /products` orders by this value, newest first.
              */
             createdAt: string;
             space: components["schemas"]["PublicSpaceRefOutput"];
         };
-        /** @description A cursor-paginated page of cross-space public products */
+        /**
+         * @description A page of cross-space public products
+         * @example {
+         *       "items": [
+         *         {
+         *           "id": "sprod_ra73keekz9f22k7889ren7",
+         *           "slug": "the-dark-forest-anthology-of-the-internet-digital",
+         *           "name": "The Dark Forest Anthology of the Internet (digital)",
+         *           "description": "A book about how to survive on the internet. It’s about the cozy web, the dark web, the dark forest, the clear net, the dark net, and a new social world emerging around us. This is the Dark Forest Anthology of the Internet.",
+         *           "kind": "digital",
+         *           "image": {
+         *             "id": "media_a9e9r767ca9frz7dvrfvna",
+         *             "filename": "GpE09OWasAAw1BX.jpeg",
+         *             "url": "https://dfos.imgix.net/media/public/a9e9r767ca9frz7dvrfvna-gpe09owasaaw1bx.jpeg",
+         *             "contentType": "image/jpeg",
+         *             "contentLength": 2468014,
+         *             "width": 3200,
+         *             "height": 3200,
+         *             "blurHash": "e$P43Mxs|Fw]K4r^oeaLaeba,;n*JTf6snr?j?kCoLayv~f6OEj]n%"
+         *           },
+         *           "prices": [
+         *             {
+         *               "id": "pprice_97hfv7rcea93267z8t677d",
+         *               "type": "one_time",
+         *               "amountCents": 1000,
+         *               "currency": "usd"
+         *             }
+         *           ],
+         *           "purchaseGrantsMembership": true,
+         *           "available": null,
+         *           "isSoldOut": false,
+         *           "purchasable": true,
+         *           "sortOrder": 0,
+         *           "release": {
+         *             "slug": "the-dark-forest-anthology-of-the-internet",
+         *             "name": "The Dark Forest Anthology of the Internet"
+         *           },
+         *           "createdAt": "2026-08-08T13:24:36.433Z",
+         *           "space": {
+         *             "id": "space_vnzfk7hth9vadc3daahd48",
+         *             "did": "did:dfos:9ctvrdn9vedda7efetrhcdakfh4cr2k",
+         *             "domain": "home",
+         *             "displayName": "DFOS",
+         *             "avatarUrl": "https://dfos.imgix.net/media/public/8e87h8c37f2vz3v6h7h3at-frame-143726546.png"
+         *           }
+         *         }
+         *       ],
+         *       "nextCursor": "eyJpZCI6InBvc3RfemUya2gyZDQ3dHplcmtoZXQ4MzQ4YyJ9",
+         *       "previousCursor": null
+         *     }
+         */
         PublicProductFeedPageOutput: {
             /** @description Page of public products across every publicly-discoverable space */
             items: components["schemas"]["PublicProductFeedItemOutput"][];
-            /** @description Opaque cursor for the next page (null if no more results forward). Pass back verbatim as `after`; do not parse. */
+            /** @description Cursor for the next page, or null at the end. Pass back verbatim as `after`. */
             nextCursor: string | null;
-            /** @description Opaque cursor for the previous page (null if at the beginning). Optional — may be omitted on responses that do not support backward paging. Pass back verbatim as `before`; do not parse. */
+            /** @description Cursor for the previous page, or null at the start. Pass back verbatim as `before`. Omitted where backward paging is unsupported. */
             previousCursor?: string | null;
-            /** @description Total count of matching items (null if not computed). Optional — may be omitted entirely; clients must not depend on its presence. */
+            /** @description Total matching items, or null when not computed. May be omitted; do not depend on its presence. */
             totalCount?: number | null;
         };
         /**
-         * @description Where the release is in time, DERIVED from its dates rather than stored. `upcoming` = published, but `releasesAt` is still in the future; `live` = out; `ended` = `closesAt` has passed and the page is archival. Open enum — treat an unrecognized value as an opaque string.
+         * @description Where the release is in time: `upcoming` before `releasesAt`, `live` once out, `ended` past `closesAt`. Open enum.
          * @enum {string}
          */
         PublicReleaseState: "upcoming" | "live" | "ended";
-        /** @description A credit on a release */
+        /**
+         * @description A credit on a release
+         * @example {
+         *       "id": "relcred_aha44ncvfnfk8t23ct3v7r",
+         *       "displayName": "Yancey",
+         *       "role": "editor"
+         *     }
+         */
         PublicReleaseCreditOutput: {
-            /**
-             * @description Stable credit id.
-             * @example relcred_6encc4akrze2ah9kntzd9t
-             */
+            /** @description Stable credit id. */
             id: string;
-            /**
-             * @description The credited name, exactly as the release renders it.
-             * @example Lena Ortiz
-             */
+            /** @description The credited name. */
             displayName: string;
-            /**
-             * @description What they did. Free text authored by the runner, never an enum — "mastering", "cover photograph", "with thanks to".
-             * @example mastering
-             */
+            /** @description The credit role, free text ("mastering"). Null when unset. */
             role: string | null;
         };
-        /** @description An entry on a release media wall */
+        /**
+         * @description An entry on a release media wall
+         * @example {
+         *       "id": "relmed_h4zdvrtz9nr73nc7v3n99e",
+         *       "caption": null,
+         *       "media": {
+         *         "id": "media_9tnfvccf6t372vdnv43ftv",
+         *         "filename": "dfos.png",
+         *         "url": "https://dfos.imgix.net/media/public/9tnfvccf6t372vdnv43ftv-dfos.png",
+         *         "contentType": "image/png",
+         *         "contentLength": 7045192,
+         *         "width": 2729,
+         *         "height": 2129,
+         *         "blurHash": "eIHLC@.7~q%MM|?bsmS5xu%MMwS24TE1oz.8xat7W=M{%Naxt7j]RP"
+         *       }
+         *     }
+         */
         PublicReleaseMediaOutput: {
-            /**
-             * @description Stable wall-entry id (not the media id — that is `media.id`).
-             * @example relmed_6encc4akrze2ah9kntzd9t
-             */
+            /** @description Stable wall-entry id (not `media.id`). */
             id: string;
-            /** @description Runner-authored caption for this entry, when there is one. */
+            /** @description Caption for this entry, when there is one. */
             caption: string | null;
-            /** @description The asset. Always a PUBLIC, permanently-hosted CDN image — this endpoint never emits a signed or expiring URL, so a wall entry whose asset is private media is omitted from the wall entirely rather than served with an expiring link. */
+            /**
+             * @description The asset. Always a permanent public CDN URL.
+             * @example {
+             *       "id": "media_efrvdarnc6zd3nhv389cf2",
+             *       "filename": "p04.jpg",
+             *       "url": "https://dfos.imgix.net/media/public/efrvdarnc6zd3nhv389cf2-p04.jpg",
+             *       "contentType": "image/jpeg",
+             *       "contentLength": 2890442,
+             *       "width": 2752,
+             *       "height": 1536,
+             *       "blurHash": "eJ7ekWt%8{RQ.7tQoyWBfRoy8yVu?atQIBM{WBt7j[Rj%Lf8MyV[s;"
+             *     }
+             */
             media: {
-                /**
-                 * @description Media object id — the value an `attachment://<id>` inline body token references. Use it to associate a body token with its entry in `bodyMedia` (required when a body carries more than one inline media item). Media ids already appear verbatim in the body markdown, so this exposes nothing new.
-                 * @example media_6encc4akrze2ah9kntzd9t
-                 */
+                /** @description Media object id — what an `attachment://<id>` inline body token references. Use it to match a token to its `bodyMedia` entry. */
                 id: string;
-                /** @description Original uploaded filename of the media object */
+                /** @description Original uploaded filename */
                 filename: string;
-                /** @description Resolved URL for the media object. A permanent, unsigned imgix CDN URL for public images; a time-limited SIGNED URL for private media (audio/video/files). When signed, `urlExpiresAt` is present — never persist a signed URL, re-fetch the post for a fresh one. */
+                /** @description Resolved URL for the media object. Permanent for public images; a time-limited signed URL for private media, which carries `urlExpiresAt`. */
                 url: string;
                 /** @description MIME type of the media object */
                 contentType: string;
-                /** @description Size of the media object in bytes (absent until upload is finalized) */
+                /** @description Size in bytes, absent until the upload is finalized */
                 contentLength?: number;
                 /** @description Pixel width (images/video) */
                 width?: number;
@@ -1861,254 +2545,434 @@ export interface components {
                 height?: number;
                 /** @description Blur-hash placeholder string for progressive image loading */
                 blurHash?: string;
-                /** @description Uploader-authored caption / alt text, when present */
+                /** @description Uploader-authored caption or alt text */
                 alt?: string;
                 /** @description Playback length in milliseconds (audio/video only) */
                 durationMs?: number;
-                /** @description CDN URL of an extracted poster frame / cover art (audio/video only) */
+                /** @description CDN URL of an extracted poster frame or cover art (audio/video only) */
                 posterUrl?: string;
-                /** @description Streamable MP4 rendition URL (audio/video only). A permanent CDN URL for public media; a time-limited SIGNED URL for private media (in which case `urlExpiresAt` is present). */
+                /** @description Streamable MP4 rendition URL (audio/video only). Permanent for public media; a time-limited signed URL for private media. */
                 playbackUrl?: string;
                 /**
                  * Format: date-time
-                 * @description When the SIGNED `url` / `playbackUrl` expire (ISO 8601 UTC). PRESENT iff those URLs are time-limited signed URLs (private media); ABSENT means they are permanent (public images). Never persist a signed URL — re-fetch the post to obtain fresh ones.
+                 * @description When the signed `url` and `playbackUrl` expire (ISO 8601 UTC). Present only for private media. Signed URLs are ephemeral — re-fetch rather than persisting them.
                  */
                 urlExpiresAt?: string;
                 /** @description Amplitude overview for audio — up to 200 integers, each 0–100 */
                 waveformPeaks?: number[];
             };
         };
-        /** @description A public calendar event a release points at */
+        /**
+         * @description A public event a release points at. Address it in the events namespace as `(seriesId, recurrenceId)`.
+         * @example {
+         *       "seriesId": "evt_ehrrkh8thkkdh6c383zkf9",
+         *       "recurrenceId": "2026-09-09",
+         *       "title": "DFOS product weekly",
+         *       "isAllDay": true,
+         *       "timeZone": null,
+         *       "startsAt": null,
+         *       "startDate": "2026-09-09"
+         *     }
+         */
         PublicReleaseEventOutput: {
-            /**
-             * @description The event series — the same `seriesId` the events namespace emits.
-             * @example evt_6encc4akrze2ah9kntzd9t
-             */
+            /** @description The event series id. */
             seriesId: string;
-            /**
-             * @description RFC 5545 RECURRENCE-ID of the occurrence: its local wall-time (`YYYY-MM-DDTHH:MM:SS`), or its date (`YYYY-MM-DD`) for an all-day event. Byte-identical to the events namespace's value for the same occurrence.
-             * @example 2026-09-12T19:00:00
-             */
+            /** @description RFC 5545 RECURRENCE-ID of the occurrence: local wall-time (`YYYY-MM-DDTHH:MM:SS`), or a date (`YYYY-MM-DD`) when all-day. */
             recurrenceId: string;
-            /**
-             * @description Event title
-             * @example Listening party
-             */
+            /** @description Event title */
             title: string;
-            /** @description True for a date-based occurrence: `startDate` carries the date and `startsAt` is null. False for a timed one, where the reverse holds. */
+            /** @description True for a date-based occurrence: `startDate` is set, `startsAt` is null. */
             isAllDay: boolean;
             /**
-             * @description Timed only: the IANA zone the event was authored in — the zone `recurrenceId` is expressed in. Null for an all-day event.
+             * @description Timed only: the IANA zone `recurrenceId` is expressed in. Null for an all-day event.
              * @example America/New_York
              */
             timeZone: string | null;
-            /**
-             * @description That occurrence's resolved start instant (ISO 8601 UTC). Null for an all-day event.
-             * @example 2026-09-13T00:00:00.000Z
-             */
+            /** @description The occurrence's start instant (ISO 8601 UTC). Null for an all-day event. */
             startsAt: string | null;
-            /**
-             * @description All-day only: that occurrence's start date (`YYYY-MM-DD`). Null for a timed event.
-             * @example 2026-09-12
-             */
+            /** @description All-day only: the occurrence's start date (`YYYY-MM-DD`). Null for a timed event. */
             startDate: string | null;
         };
-        /** @description A release in a space public release shelf */
+        /**
+         * @description A release in a space's public shelf
+         * @example {
+         *       "id": "rel_vdeaff8zac8cr49fa624dh",
+         *       "slug": "the-dark-forest-anthology-of-the-internet",
+         *       "name": "The Dark Forest Anthology of the Internet",
+         *       "state": "live",
+         *       "shortDescription": "The digital edition, readable anywhere, out now.",
+         *       "cover": {
+         *         "id": "media_a9e9r767ca9frz7dvrfvna",
+         *         "filename": "GpE09OWasAAw1BX.jpeg",
+         *         "url": "https://dfos.imgix.net/media/public/a9e9r767ca9frz7dvrfvna-gpe09owasaaw1bx.jpeg",
+         *         "contentType": "image/jpeg",
+         *         "contentLength": 2468014,
+         *         "width": 3200,
+         *         "height": 3200,
+         *         "blurHash": "e$P43Mxs|Fw]K4r^oeaLaeba,;n*JTf6snr?j?kCoLayv~f6OEj]n%"
+         *       },
+         *       "catalogNumber": null,
+         *       "location": null,
+         *       "publishedAt": "2026-08-08T13:24:36.433Z",
+         *       "releasesAt": "2026-08-08T13:24:36.433Z",
+         *       "closesAt": null,
+         *       "productCount": 1
+         *     }
+         */
         PublicReleaseSummaryOutput: {
-            /**
-             * @description Stable release id. Store this identifier; the slug may change.
-             * @example rel_6encc4akrze2ah9kntzd9t
-             */
+            /** @description Stable release id. */
             id: string;
             /**
-             * @description The release's public page slug (the `/r/{slug}` segment on the space site). Mutable — changing it breaks old links with no redirect; store the `id`.
-             * @example blue-record
+             * @description The release's public page slug (`/r/{slug}` on the space site). A mutable alias; `id` is canonical.
+             * @example the-dark-forest-anthology-of-the-internet
              */
             slug: string;
-            /**
-             * @description Release name
-             * @example Blue Record
-             */
+            /** @description Release name */
             name: string;
             state: components["schemas"]["PublicReleaseState"];
-            /** @description One-line blurb. Newlines are not expected here; render as a single line of text. */
+            /** @description One-line blurb. */
             shortDescription: string | null;
-            /** @description Cover image, when the release has one. Always a PUBLIC, permanently-hosted CDN image — this endpoint never emits a signed or expiring URL. */
+            /** @description Cover image, when the release has one. Always a permanent public CDN URL. */
             cover?: components["schemas"]["PublicMediaOutput"];
             /**
-             * @description The space's own catalog expression ("MTL-001", "no. 4"). NOT A KEY: free text, deliberately un-unique — runners reuse it, re-number, and leave gaps. Render it; never index on it.
+             * @description The space's own catalog expression. Free text, not unique, never a key.
              * @example MTL-001
              */
             catalogNumber: string | null;
             /**
-             * @description Freeform place string, purely presentational. Never geocoded, never a key.
+             * @description Freeform place string. Never geocoded, never a key.
              * @example Austin, TX
              */
             location: string | null;
             /**
              * Format: date-time
-             * @description When this release was published (ISO 8601 UTC). The index is ordered by this value, newest first. A runner who unpublishes and re-publishes moves it, and the shelf re-sorts.
-             * @example 2026-09-01T17:00:00.000Z
+             * @description When this release was published (ISO 8601 UTC). Release lists order by this value, newest first.
              */
             publishedAt: string;
-            /**
-             * @description When the release OPENS, when the runner named a date (ISO 8601 UTC). While it is in the future the `state` is `upcoming`. Null when the release has no opening date, which is the common case.
-             * @example 2026-09-12T17:00:00.000Z
-             */
+            /** @description When the release opens (ISO 8601 UTC). Before it, `state` is `upcoming`. Null when no opening date is set. */
             releasesAt: string | null;
             /**
-             * @description When the release CLOSES, when the runner named a date (ISO 8601 UTC). Once it has passed the `state` is `ended` and the page stays readable as an archival record. Null when the release has no closing date.
+             * @description When the release closes (ISO 8601 UTC). Past it, `state` is `ended` and the page stays readable. Null when no closing date is set.
              * @example 2026-10-12T17:00:00.000Z
              */
             closesAt: string | null;
-            /**
-             * @description How many products in the composition are PUBLICLY purchasable — the same set the release page lists, counted. Never the raw composition size, which would disclose how much of a release a space has not published.
-             * @example 2
-             */
+            /** @description How many of the composed products are publicly purchasable. */
             productCount: number;
         };
-        /** @description A release public page */
+        /**
+         * @description A release public page
+         * @example {
+         *       "id": "rel_vdeaff8zac8cr49fa624dh",
+         *       "slug": "the-dark-forest-anthology-of-the-internet",
+         *       "name": "The Dark Forest Anthology of the Internet",
+         *       "state": "live",
+         *       "shortDescription": "The digital edition, readable anywhere, out now.",
+         *       "cover": {
+         *         "id": "media_a9e9r767ca9frz7dvrfvna",
+         *         "filename": "GpE09OWasAAw1BX.jpeg",
+         *         "url": "https://dfos.imgix.net/media/public/a9e9r767ca9frz7dvrfvna-gpe09owasaaw1bx.jpeg",
+         *         "contentType": "image/jpeg",
+         *         "contentLength": 2468014,
+         *         "width": 3200,
+         *         "height": 3200,
+         *         "blurHash": "e$P43Mxs|Fw]K4r^oeaLaeba,;n*JTf6snr?j?kCoLayv~f6OEj]n%"
+         *       },
+         *       "catalogNumber": null,
+         *       "location": null,
+         *       "publishedAt": "2026-08-08T13:24:36.433Z",
+         *       "releasesAt": "2026-08-08T13:24:36.433Z",
+         *       "closesAt": null,
+         *       "productCount": 1,
+         *       "longDescription": "A book about how to survive on the internet. It’s about the cozy web, the dark web, the dark forest, the clear net, the dark net, and a new social world emerging around us. This is the Dark Forest Anthology of the Internet.",
+         *       "media": [
+         *         {
+         *           "id": "relmed_h4zdvrtz9nr73nc7v3n99e",
+         *           "caption": null,
+         *           "media": {
+         *             "id": "media_9tnfvccf6t372vdnv43ftv",
+         *             "filename": "dfos.png",
+         *             "url": "https://dfos.imgix.net/media/public/9tnfvccf6t372vdnv43ftv-dfos.png",
+         *             "contentType": "image/png",
+         *             "contentLength": 7045192,
+         *             "width": 2729,
+         *             "height": 2129,
+         *             "blurHash": "eIHLC@.7~q%MM|?bsmS5xu%MMwS24TE1oz.8xat7W=M{%Naxt7j]RP"
+         *           }
+         *         }
+         *       ],
+         *       "credits": [
+         *         {
+         *           "id": "relcred_aha44ncvfnfk8t23ct3v7r",
+         *           "displayName": "Yancey",
+         *           "role": "editor"
+         *         }
+         *       ],
+         *       "products": [
+         *         {
+         *           "id": "sprod_ra73keekz9f22k7889ren7",
+         *           "slug": "the-dark-forest-anthology-of-the-internet-digital",
+         *           "name": "The Dark Forest Anthology of the Internet (digital)",
+         *           "description": "A book about how to survive on the internet. It’s about the cozy web, the dark web, the dark forest, the clear net, the dark net, and a new social world emerging around us. This is the Dark Forest Anthology of the Internet.",
+         *           "kind": "digital",
+         *           "image": {
+         *             "id": "media_a9e9r767ca9frz7dvrfvna",
+         *             "filename": "GpE09OWasAAw1BX.jpeg",
+         *             "url": "https://dfos.imgix.net/media/public/a9e9r767ca9frz7dvrfvna-gpe09owasaaw1bx.jpeg",
+         *             "contentType": "image/jpeg",
+         *             "contentLength": 2468014,
+         *             "width": 3200,
+         *             "height": 3200,
+         *             "blurHash": "e$P43Mxs|Fw]K4r^oeaLaeba,;n*JTf6snr?j?kCoLayv~f6OEj]n%"
+         *           },
+         *           "prices": [
+         *             {
+         *               "id": "pprice_97hfv7rcea93267z8t677d",
+         *               "type": "one_time",
+         *               "amountCents": 1000,
+         *               "currency": "usd"
+         *             }
+         *           ],
+         *           "purchaseGrantsMembership": true,
+         *           "available": null,
+         *           "isSoldOut": false,
+         *           "purchasable": true,
+         *           "sortOrder": 0,
+         *           "release": {
+         *             "slug": "the-dark-forest-anthology-of-the-internet",
+         *             "name": "The Dark Forest Anthology of the Internet"
+         *           },
+         *           "createdAt": "2026-08-08T13:24:36.433Z"
+         *         }
+         *       ],
+         *       "events": []
+         *     }
+         */
         PublicReleaseOutput: {
-            /**
-             * @description Stable release id. Store this identifier; the slug may change.
-             * @example rel_6encc4akrze2ah9kntzd9t
-             */
+            /** @description Stable release id. */
             id: string;
             /**
-             * @description The release's public page slug (the `/r/{slug}` segment on the space site). Mutable — changing it breaks old links with no redirect; store the `id`.
-             * @example blue-record
+             * @description The release's public page slug (`/r/{slug}` on the space site). A mutable alias; `id` is canonical.
+             * @example the-dark-forest-anthology-of-the-internet
              */
             slug: string;
-            /**
-             * @description Release name
-             * @example Blue Record
-             */
+            /** @description Release name */
             name: string;
             state: components["schemas"]["PublicReleaseState"];
-            /** @description One-line blurb. Newlines are not expected here; render as a single line of text. */
+            /** @description One-line blurb. */
             shortDescription: string | null;
-            /** @description Cover image, when the release has one. Always a PUBLIC, permanently-hosted CDN image — this endpoint never emits a signed or expiring URL. */
+            /** @description Cover image, when the release has one. Always a permanent public CDN URL. */
             cover?: components["schemas"]["PublicMediaOutput"];
             /**
-             * @description The space's own catalog expression ("MTL-001", "no. 4"). NOT A KEY: free text, deliberately un-unique — runners reuse it, re-number, and leave gaps. Render it; never index on it.
+             * @description The space's own catalog expression. Free text, not unique, never a key.
              * @example MTL-001
              */
             catalogNumber: string | null;
             /**
-             * @description Freeform place string, purely presentational. Never geocoded, never a key.
+             * @description Freeform place string. Never geocoded, never a key.
              * @example Austin, TX
              */
             location: string | null;
             /**
              * Format: date-time
-             * @description When this release was published (ISO 8601 UTC). The index is ordered by this value, newest first. A runner who unpublishes and re-publishes moves it, and the shelf re-sorts.
-             * @example 2026-09-01T17:00:00.000Z
+             * @description When this release was published (ISO 8601 UTC). Release lists order by this value, newest first.
              */
             publishedAt: string;
-            /**
-             * @description When the release OPENS, when the runner named a date (ISO 8601 UTC). While it is in the future the `state` is `upcoming`. Null when the release has no opening date, which is the common case.
-             * @example 2026-09-12T17:00:00.000Z
-             */
+            /** @description When the release opens (ISO 8601 UTC). Before it, `state` is `upcoming`. Null when no opening date is set. */
             releasesAt: string | null;
             /**
-             * @description When the release CLOSES, when the runner named a date (ISO 8601 UTC). Once it has passed the `state` is `ended` and the page stays readable as an archival record. Null when the release has no closing date.
+             * @description When the release closes (ISO 8601 UTC). Past it, `state` is `ended` and the page stays readable. Null when no closing date is set.
              * @example 2026-10-12T17:00:00.000Z
              */
             closesAt: string | null;
-            /**
-             * @description How many products in the composition are PUBLICLY purchasable — the same set the release page lists, counted. Never the raw composition size, which would disclose how much of a release a space has not published.
-             * @example 2
-             */
+            /** @description How many of the composed products are publicly purchasable. */
             productCount: number;
-            /** @description Long-form release copy. Newlines are significant; render with preserved whitespace. */
+            /** @description Long-form release copy. Newlines are significant. */
             longDescription: string | null;
-            /** @description The media wall, in the runner's wall order. Entries whose asset is private media are omitted (this surface emits no signed URLs), so an empty wall is a valid answer. */
+            /** @description The media wall, in wall order. Entries backed by private media are omitted. */
             media: components["schemas"]["PublicReleaseMediaOutput"][];
-            /** @description Credits, in credit order. Display text only — a name and an optional role. If credits ever carry a subject, only accepted ones appear, and a pending invitation is indistinguishable from a credit that was never offered. */
+            /** @description Credits, in credit order. A name and an optional role. */
             credits: components["schemas"]["PublicReleaseCreditOutput"][];
-            /** @description The composed products, in the release's curated order — the SAME objects `products.getProduct` returns, filtered by the store's own public-visibility rule. A product with no public purchase page is absent from this list while the release page renders normally, and is not counted in `productCount`. */
+            /** @description The composed products, in the release's curated order. Products with no public page are absent and uncounted. */
             products: components["schemas"]["PublicProductOutput"][];
-            /** @description Public calendar events attached to this release, soonest first. Each is filtered by the EVENTS visibility rules; an event an anonymous caller may not see, or one with no occurrence in the window this API serves, is simply absent. */
+            /** @description Public events attached to this release, soonest first. Events an anonymous caller may not see are absent. */
             events: components["schemas"]["PublicReleaseEventOutput"][];
         };
-        /** @description A cursor-paginated page of public releases */
+        /**
+         * @description A page of public releases
+         * @example {
+         *       "items": [
+         *         {
+         *           "id": "rel_vdeaff8zac8cr49fa624dh",
+         *           "slug": "the-dark-forest-anthology-of-the-internet",
+         *           "name": "The Dark Forest Anthology of the Internet",
+         *           "state": "live",
+         *           "shortDescription": "The digital edition, readable anywhere, out now.",
+         *           "cover": {
+         *             "id": "media_a9e9r767ca9frz7dvrfvna",
+         *             "filename": "GpE09OWasAAw1BX.jpeg",
+         *             "url": "https://dfos.imgix.net/media/public/a9e9r767ca9frz7dvrfvna-gpe09owasaaw1bx.jpeg",
+         *             "contentType": "image/jpeg",
+         *             "contentLength": 2468014,
+         *             "width": 3200,
+         *             "height": 3200,
+         *             "blurHash": "e$P43Mxs|Fw]K4r^oeaLaeba,;n*JTf6snr?j?kCoLayv~f6OEj]n%"
+         *           },
+         *           "catalogNumber": null,
+         *           "location": null,
+         *           "publishedAt": "2026-08-08T13:24:36.433Z",
+         *           "releasesAt": "2026-08-08T13:24:36.433Z",
+         *           "closesAt": null,
+         *           "productCount": 1
+         *         }
+         *       ],
+         *       "nextCursor": null,
+         *       "previousCursor": null,
+         *       "totalCount": 1
+         *     }
+         */
         PublicReleasePageOutput: {
             /** @description Page of public releases */
             items: components["schemas"]["PublicReleaseSummaryOutput"][];
-            /** @description Opaque cursor for the next page (null if no more results forward). Pass back verbatim as `after`; do not parse. */
+            /** @description Cursor for the next page, or null at the end. Pass back verbatim as `after`. */
             nextCursor: string | null;
-            /** @description Opaque cursor for the previous page (null if at the beginning). Optional — may be omitted on responses that do not support backward paging. Pass back verbatim as `before`; do not parse. */
+            /** @description Cursor for the previous page, or null at the start. Pass back verbatim as `before`. Omitted where backward paging is unsupported. */
             previousCursor?: string | null;
-            /** @description Total count of matching items (null if not computed). Optional — may be omitted entirely; clients must not depend on its presence. */
+            /** @description Total matching items, or null when not computed. May be omitted; do not depend on its presence. */
             totalCount?: number | null;
         };
-        /** @description A public release with the space it belongs to */
+        /**
+         * @description A public release with the space it belongs to
+         * @example {
+         *       "id": "rel_vdeaff8zac8cr49fa624dh",
+         *       "slug": "the-dark-forest-anthology-of-the-internet",
+         *       "name": "The Dark Forest Anthology of the Internet",
+         *       "state": "live",
+         *       "shortDescription": "The digital edition, readable anywhere, out now.",
+         *       "cover": {
+         *         "id": "media_a9e9r767ca9frz7dvrfvna",
+         *         "filename": "GpE09OWasAAw1BX.jpeg",
+         *         "url": "https://dfos.imgix.net/media/public/a9e9r767ca9frz7dvrfvna-gpe09owasaaw1bx.jpeg",
+         *         "contentType": "image/jpeg",
+         *         "contentLength": 2468014,
+         *         "width": 3200,
+         *         "height": 3200,
+         *         "blurHash": "e$P43Mxs|Fw]K4r^oeaLaeba,;n*JTf6snr?j?kCoLayv~f6OEj]n%"
+         *       },
+         *       "catalogNumber": null,
+         *       "location": null,
+         *       "publishedAt": "2026-08-08T13:24:36.433Z",
+         *       "releasesAt": "2026-08-08T13:24:36.433Z",
+         *       "closesAt": null,
+         *       "productCount": 1,
+         *       "space": {
+         *         "id": "space_vnzfk7hth9vadc3daahd48",
+         *         "did": "did:dfos:9ctvrdn9vedda7efetrhcdakfh4cr2k",
+         *         "domain": "home",
+         *         "displayName": "DFOS",
+         *         "avatarUrl": "https://dfos.imgix.net/media/public/8e87h8c37f2vz3v6h7h3at-frame-143726546.png"
+         *       }
+         *     }
+         */
         PublicReleaseFeedItemOutput: {
-            /**
-             * @description Stable release id. Store this identifier; the slug may change.
-             * @example rel_6encc4akrze2ah9kntzd9t
-             */
+            /** @description Stable release id. */
             id: string;
             /**
-             * @description The release's public page slug (the `/r/{slug}` segment on the space site). Mutable — changing it breaks old links with no redirect; store the `id`.
-             * @example blue-record
+             * @description The release's public page slug (`/r/{slug}` on the space site). A mutable alias; `id` is canonical.
+             * @example the-dark-forest-anthology-of-the-internet
              */
             slug: string;
-            /**
-             * @description Release name
-             * @example Blue Record
-             */
+            /** @description Release name */
             name: string;
             state: components["schemas"]["PublicReleaseState"];
-            /** @description One-line blurb. Newlines are not expected here; render as a single line of text. */
+            /** @description One-line blurb. */
             shortDescription: string | null;
-            /** @description Cover image, when the release has one. Always a PUBLIC, permanently-hosted CDN image — this endpoint never emits a signed or expiring URL. */
+            /** @description Cover image, when the release has one. Always a permanent public CDN URL. */
             cover?: components["schemas"]["PublicMediaOutput"];
             /**
-             * @description The space's own catalog expression ("MTL-001", "no. 4"). NOT A KEY: free text, deliberately un-unique — runners reuse it, re-number, and leave gaps. Render it; never index on it.
+             * @description The space's own catalog expression. Free text, not unique, never a key.
              * @example MTL-001
              */
             catalogNumber: string | null;
             /**
-             * @description Freeform place string, purely presentational. Never geocoded, never a key.
+             * @description Freeform place string. Never geocoded, never a key.
              * @example Austin, TX
              */
             location: string | null;
             /**
              * Format: date-time
-             * @description When this release was published (ISO 8601 UTC). The index is ordered by this value, newest first. A runner who unpublishes and re-publishes moves it, and the shelf re-sorts.
-             * @example 2026-09-01T17:00:00.000Z
+             * @description When this release was published (ISO 8601 UTC). Release lists order by this value, newest first.
              */
             publishedAt: string;
-            /**
-             * @description When the release OPENS, when the runner named a date (ISO 8601 UTC). While it is in the future the `state` is `upcoming`. Null when the release has no opening date, which is the common case.
-             * @example 2026-09-12T17:00:00.000Z
-             */
+            /** @description When the release opens (ISO 8601 UTC). Before it, `state` is `upcoming`. Null when no opening date is set. */
             releasesAt: string | null;
             /**
-             * @description When the release CLOSES, when the runner named a date (ISO 8601 UTC). Once it has passed the `state` is `ended` and the page stays readable as an archival record. Null when the release has no closing date.
+             * @description When the release closes (ISO 8601 UTC). Past it, `state` is `ended` and the page stays readable. Null when no closing date is set.
              * @example 2026-10-12T17:00:00.000Z
              */
             closesAt: string | null;
-            /**
-             * @description How many products in the composition are PUBLICLY purchasable — the same set the release page lists, counted. Never the raw composition size, which would disclose how much of a release a space has not published.
-             * @example 2
-             */
+            /** @description How many of the composed products are publicly purchasable. */
             productCount: number;
             space: components["schemas"]["PublicSpaceRefOutput"];
         };
-        /** @description A cursor-paginated page of cross-space public releases */
+        /**
+         * @description A page of cross-space public releases
+         * @example {
+         *       "items": [
+         *         {
+         *           "id": "rel_vdeaff8zac8cr49fa624dh",
+         *           "slug": "the-dark-forest-anthology-of-the-internet",
+         *           "name": "The Dark Forest Anthology of the Internet",
+         *           "state": "live",
+         *           "shortDescription": "The digital edition, readable anywhere, out now.",
+         *           "cover": {
+         *             "id": "media_a9e9r767ca9frz7dvrfvna",
+         *             "filename": "GpE09OWasAAw1BX.jpeg",
+         *             "url": "https://dfos.imgix.net/media/public/a9e9r767ca9frz7dvrfvna-gpe09owasaaw1bx.jpeg",
+         *             "contentType": "image/jpeg",
+         *             "contentLength": 2468014,
+         *             "width": 3200,
+         *             "height": 3200,
+         *             "blurHash": "e$P43Mxs|Fw]K4r^oeaLaeba,;n*JTf6snr?j?kCoLayv~f6OEj]n%"
+         *           },
+         *           "catalogNumber": null,
+         *           "location": null,
+         *           "publishedAt": "2026-08-08T13:24:36.433Z",
+         *           "releasesAt": "2026-08-08T13:24:36.433Z",
+         *           "closesAt": null,
+         *           "productCount": 1,
+         *           "space": {
+         *             "id": "space_vnzfk7hth9vadc3daahd48",
+         *             "did": "did:dfos:9ctvrdn9vedda7efetrhcdakfh4cr2k",
+         *             "domain": "home",
+         *             "displayName": "DFOS",
+         *             "avatarUrl": "https://dfos.imgix.net/media/public/8e87h8c37f2vz3v6h7h3at-frame-143726546.png"
+         *           }
+         *         }
+         *       ],
+         *       "nextCursor": "eyJpZCI6InBvc3RfemUya2gyZDQ3dHplcmtoZXQ4MzQ4YyJ9",
+         *       "previousCursor": null
+         *     }
+         */
         PublicReleaseFeedPageOutput: {
             /** @description Page of public releases across every publicly-discoverable space */
             items: components["schemas"]["PublicReleaseFeedItemOutput"][];
-            /** @description Opaque cursor for the next page (null if no more results forward). Pass back verbatim as `after`; do not parse. */
+            /** @description Cursor for the next page, or null at the end. Pass back verbatim as `after`. */
             nextCursor: string | null;
-            /** @description Opaque cursor for the previous page (null if at the beginning). Optional — may be omitted on responses that do not support backward paging. Pass back verbatim as `before`; do not parse. */
+            /** @description Cursor for the previous page, or null at the start. Pass back verbatim as `before`. Omitted where backward paging is unsupported. */
             previousCursor?: string | null;
-            /** @description Total count of matching items (null if not computed). Optional — may be omitted entirely; clients must not depend on its presence. */
+            /** @description Total matching items, or null when not computed. May be omitted; do not depend on its presence. */
             totalCount?: number | null;
         };
-        /** @description A link on a public user profile */
+        /**
+         * @description A link on a public user profile
+         * @example {
+         *       "url": "https://dfos.com/",
+         *       "label": null,
+         *       "title": "Dark Forest OS",
+         *       "description": null,
+         *       "imageUrl": "https://dfos.imgix.net/media/public/ne979cake8har94728rne7-dfos-private-internet.png"
+         *     }
+         */
         PublicProfileLinkOutput: {
             /** @description The link URL as the profile owner entered it */
             url: string;
@@ -2118,31 +2982,82 @@ export interface components {
             title: string | null;
             /** @description Owner-curated short blurb for the link, or null */
             description: string | null;
-            /** @description Resolved public CDN URL for the cached OG preview image, or null */
+            /** @description Public CDN URL for the cached OG preview image, or null */
             imageUrl: string | null;
         };
-        /** @description A public user profile */
+        /**
+         * @description A public user profile
+         * @example {
+         *       "id": "identity_3drf9nfk93na7vfdk723r6",
+         *       "did": "did:dfos:z8zt7ecn9h8n782kae3k796crva2c73",
+         *       "username": "bvalosek",
+         *       "displayName": "Brandon",
+         *       "avatarUrl": "https://dfos.imgix.net/media/public/ekceek9z64vz4cavrzr7v2-lil-robo-pfp.png",
+         *       "bio": "cofounder / architect @ DFOS and Metalabel . building what i want to see more of ",
+         *       "verifiedDomain": "bvalosek.com",
+         *       "links": [
+         *         {
+         *           "url": "https://bvalosek.com",
+         *           "label": null,
+         *           "title": null,
+         *           "description": null,
+         *           "imageUrl": null
+         *         }
+         *       ],
+         *       "protocol": {
+         *         "headOpCid": "bafyreig6d4y67d5jmux475unozzu7tr5g7fqhjbegozwepumcy3pen3woy",
+         *         "profile": {
+         *           "contentId": "f4nrnnv7zv89t7nazdnk8t2zn7chvcf",
+         *           "headOpCid": "bafyreiasbpcbkct4mcqdopnz7vbk6yhdd4e35eotfnxsmg5vuxsw32ybx4"
+         *         }
+         *       },
+         *       "spaces": [
+         *         {
+         *           "id": "space_vnzfk7hth9vadc3daahd48",
+         *           "did": "did:dfos:9ctvrdn9vedda7efetrhcdakfh4cr2k",
+         *           "domain": "home",
+         *           "displayName": "DFOS",
+         *           "avatarUrl": "https://dfos.imgix.net/media/public/8e87h8c37f2vz3v6h7h3at-frame-143726546.png",
+         *           "memberCountSummary": "thousands of members",
+         *           "pinned": true,
+         *           "pinMessage": "Where I write about what we are building.",
+         *           "pinnedAt": "2026-08-14T16:41:07.882Z"
+         *         },
+         *         {
+         *           "id": "space_z94a849d9kdftfvv3n9hn7",
+         *           "did": "did:dfos:f3a4ncdta66627c6e2cnhhndan7k882",
+         *           "domain": "rakowwwski",
+         *           "displayName": "POPULAR",
+         *           "avatarUrl": "https://dfos.imgix.net/media/public/e2nfc34a369da2tfatcvf4-32351ed8-9995-48b3-ad72-1ac2fda11f47-1024x1024-2-.jpg",
+         *           "memberCountSummary": "about a dozen members",
+         *           "pinned": false,
+         *           "pinMessage": null,
+         *           "pinnedAt": null
+         *         }
+         *       ]
+         *     }
+         */
         PublicUserOutput: {
-            /** @description The user's identity entity id (`identity_…`) — a stable, URL-safe identifier, accepted anywhere `{user}` is. The canonical profile-URL identifier when the user has no handle. */
+            /** @description The user's identity entity id (`identity_…`). Stable, and accepted anywhere `{user}` is. */
             id: string;
             did: components["schemas"]["ProtocolDid"];
-            /** @description The user's handle, or null if unset. A MUTABLE alias — a handle can change or be released; the `id` and `did` are the canonical, stable identifiers to store. */
+            /** @description The user's handle, or null if unset. A mutable alias; the `id` and `did` are canonical. */
             username: string | null;
             /** @description Display name, or null */
             displayName: string | null;
-            /** @description Resolved public CDN URL for the avatar, or null */
+            /** @description Public CDN URL for the avatar, or null */
             avatarUrl: string | null;
             /** @description Profile bio / description, or null */
             bio: string | null;
-            /** @description A domain this user has proven control of via origin binding, or null. The claim is a `DfosOrigin` entry on the user's identity chain, and the domain independently publishes the user's DID back — so a third party can verify both halves without trusting this API (see `GET /protocol`). Null when the user claims no domain, has not yet proven a claim, or the domain now attests a different identity. A domain whose attestation has merely gone quiet keeps its value: silence alone is not a contradiction. But a domain that DID contradict this identity and has not attested it since reads null even once it falls silent — going offline does not retract a contradiction. */
+            /** @description A domain this user has proven control of through origin binding, or null. Null when no claim is proven, or when the domain now attests a different identity. */
             verifiedDomain: string | null;
             /** @description Ordered profile links (may be empty) */
             links: components["schemas"]["PublicProfileLinkOutput"][];
-            /** @description Protocol proof-plane handles for this user's identity and optional profile content chain. Present iff the identity chain exists; absent for legacy identities without a chain. Combine with `GET /protocol` to fetch and verify the chains from the relay. */
+            /** @description Protocol proof-plane handles for this user's identity chain. Absent for identities without one. Resolve them through `GET /protocol`. */
             protocol?: {
                 /** @description The identity chain's current head operation CID */
                 headOpCid: string;
-                /** @description Protocol proof-plane handles for the identity profile content chain. Present iff the identity has a non-empty profile chain; absent when the profile is empty or its chain has not been created. */
+                /** @description Protocol handles for the identity profile content chain. Absent when there is no profile chain. */
                 profile?: {
                     /** @description The identity profile's protocol content-chain id */
                     contentId: string;
@@ -2150,85 +3065,291 @@ export interface components {
                     headOpCid: string;
                 };
             };
-            /** @description The user's public space memberships: every pinned space (in slot order) followed by up to 20 more, most recently joined first. May be empty. Use `GET /users/{user}/spaces` for the complete, paginated list. */
+            /** @description Every pinned space, then up to 20 more of the user's public spaces, most recently joined first. Use `GET /users/{user}/spaces` for the full list. */
             spaces: components["schemas"]["PublicUserSpaceOutput"][];
         };
-        /** @description A public user profile in the directory listing */
+        /**
+         * @description A public user profile in the directory listing
+         * @example {
+         *       "id": "identity_3drf9nfk93na7vfdk723r6",
+         *       "did": "did:dfos:z8zt7ecn9h8n782kae3k796crva2c73",
+         *       "username": "bvalosek",
+         *       "displayName": "Brandon",
+         *       "avatarUrl": "https://dfos.imgix.net/media/public/ekceek9z64vz4cavrzr7v2-lil-robo-pfp.png",
+         *       "bio": "cofounder / architect @ DFOS and Metalabel . building what i want to see more of ",
+         *       "verifiedDomain": "bvalosek.com",
+         *       "links": [
+         *         {
+         *           "url": "https://bvalosek.com",
+         *           "label": null,
+         *           "title": null,
+         *           "description": null,
+         *           "imageUrl": null
+         *         }
+         *       ],
+         *       "pinnedSpaces": [
+         *         {
+         *           "did": "did:dfos:9ctvrdn9vedda7efetrhcdakfh4cr2k",
+         *           "domain": "home",
+         *           "displayName": "DFOS",
+         *           "avatarUrl": "https://dfos.imgix.net/media/public/8e87h8c37f2vz3v6h7h3at-frame-143726546.png"
+         *         }
+         *       ]
+         *     }
+         */
         PublicUserListItemOutput: {
-            /** @description The user's identity entity id (`identity_…`) — a stable, URL-safe identifier, accepted anywhere `{user}` is. The canonical profile-URL identifier when the user has no handle. */
+            /** @description The user's identity entity id (`identity_…`). Stable, and accepted anywhere `{user}` is. */
             id: string;
             did: components["schemas"]["ProtocolDid"];
-            /** @description The user's handle, or null if unset. A MUTABLE alias — a handle can change or be released; the `id` and `did` are the canonical, stable identifiers to store. */
+            /** @description The user's handle, or null if unset. A mutable alias; the `id` and `did` are canonical. */
             username: string | null;
             /** @description Display name, or null */
             displayName: string | null;
-            /** @description Resolved public CDN URL for the avatar, or null */
+            /** @description Public CDN URL for the avatar, or null */
             avatarUrl: string | null;
             /** @description Profile bio / description, or null */
             bio: string | null;
-            /** @description A domain this user has proven control of via origin binding, or null. The claim is a `DfosOrigin` entry on the user's identity chain, and the domain independently publishes the user's DID back — so a third party can verify both halves without trusting this API (see `GET /protocol`). Null when the user claims no domain, has not yet proven a claim, or the domain now attests a different identity. A domain whose attestation has merely gone quiet keeps its value: silence alone is not a contradiction. But a domain that DID contradict this identity and has not attested it since reads null even once it falls silent — going offline does not retract a contradiction. */
+            /** @description A domain this user has proven control of through origin binding, or null. Null when no claim is proven, or when the domain now attests a different identity. */
             verifiedDomain: string | null;
             /** @description Ordered profile links (may be empty) */
             links: components["schemas"]["PublicProfileLinkOutput"][];
-            /** @description The user's pinned spaces in slot order (may be empty). Terse cards — fetch the profile for the full membership shelf. */
+            /** @description The user's pinned spaces in slot order (may be empty). */
             pinnedSpaces: components["schemas"]["PublicUserSpaceCardOutput"][];
         };
-        /** @description A cursor-paginated page of public user profiles */
+        /**
+         * @description A cursor-paginated page of public user profiles
+         * @example {
+         *       "items": [
+         *         {
+         *           "id": "identity_3drf9nfk93na7vfdk723r6",
+         *           "did": "did:dfos:z8zt7ecn9h8n782kae3k796crva2c73",
+         *           "username": "bvalosek",
+         *           "displayName": "Brandon",
+         *           "avatarUrl": "https://dfos.imgix.net/media/public/ekceek9z64vz4cavrzr7v2-lil-robo-pfp.png",
+         *           "bio": "cofounder / architect @ DFOS and Metalabel . building what i want to see more of ",
+         *           "verifiedDomain": "bvalosek.com",
+         *           "links": [
+         *             {
+         *               "url": "https://bvalosek.com",
+         *               "label": null,
+         *               "title": null,
+         *               "description": null,
+         *               "imageUrl": null
+         *             }
+         *           ],
+         *           "pinnedSpaces": [
+         *             {
+         *               "did": "did:dfos:9ctvrdn9vedda7efetrhcdakfh4cr2k",
+         *               "domain": "home",
+         *               "displayName": "DFOS",
+         *               "avatarUrl": "https://dfos.imgix.net/media/public/8e87h8c37f2vz3v6h7h3at-frame-143726546.png"
+         *             }
+         *           ]
+         *         },
+         *         {
+         *           "id": "identity_349f9ka72nrefnf8kvrnhh",
+         *           "did": "did:dfos:2228ka2thkre4ft44d73r232nfvdf2t",
+         *           "username": "aron",
+         *           "displayName": "Aron",
+         *           "avatarUrl": "https://dfos.imgix.net/media/public/24934ta9c7z8dahz7aed7r-img-5016.jpeg",
+         *           "bio": "Designing and navigating various contextual arrangements w/ an enigmatic sense of hope.",
+         *           "verifiedDomain": null,
+         *           "links": [],
+         *           "pinnedSpaces": []
+         *         }
+         *       ],
+         *       "nextCursor": "eyJpZCI6InBvc3RfemUya2gyZDQ3dHplcmtoZXQ4MzQ4YyJ9",
+         *       "previousCursor": null,
+         *       "totalCount": null
+         *     }
+         */
         PublicUserPageOutput: {
             /** @description Page of public user profiles */
             items: components["schemas"]["PublicUserListItemOutput"][];
-            /** @description Opaque cursor for the next page (null if no more results forward). Pass back verbatim as `after`; do not parse. */
+            /** @description Cursor for the next page, or null at the end. Pass back verbatim as `after`. */
             nextCursor: string | null;
-            /** @description Opaque cursor for the previous page (null if at the beginning). Optional — may be omitted on responses that do not support backward paging. Pass back verbatim as `before`; do not parse. */
+            /** @description Cursor for the previous page, or null at the start. Pass back verbatim as `before`. Omitted where backward paging is unsupported. */
             previousCursor?: string | null;
-            /** @description Total count of matching items (null if not computed). Optional — may be omitted entirely; clients must not depend on its presence. */
+            /** @description Total matching items, or null when not computed. May be omitted; do not depend on its presence. */
             totalCount?: number | null;
         };
-        /** @description A space on a user's public profile */
+        /**
+         * @description A space on a user's public profile
+         * @example {
+         *       "id": "space_vnzfk7hth9vadc3daahd48",
+         *       "did": "did:dfos:9ctvrdn9vedda7efetrhcdakfh4cr2k",
+         *       "domain": "home",
+         *       "displayName": "DFOS",
+         *       "avatarUrl": "https://dfos.imgix.net/media/public/8e87h8c37f2vz3v6h7h3at-frame-143726546.png",
+         *       "memberCountSummary": "thousands of members",
+         *       "pinned": true,
+         *       "pinMessage": "Where I write about what we are building.",
+         *       "pinnedAt": "2026-08-14T16:41:07.882Z"
+         *     }
+         */
         PublicUserSpaceOutput: {
-            /** @description The space's entity id (`space_…`). Already public as the permanent `space-{id}` subdomain form; a stable join key for consumers that also see the space through other surfaces. */
+            /** @description The space's entity id (`space_…`). Canonical and stable. */
             id: string;
             did: components["schemas"]["ProtocolDid"];
             /** @description Effective subdomain — custom domain if set, otherwise the normalized `space-{id}` form. A mutable alias; the `did` is canonical. */
             domain: string;
             /** @description Space display name, or null */
             displayName: string | null;
-            /** @description Resolved public CDN URL for the space avatar, or null */
+            /** @description Public CDN URL for the space avatar, or null */
             avatarUrl: string | null;
-            /** @description Worded member-count summary (e.g. "a few dozen members"). Public surfaces deliberately avoid exact counts. */
+            /** @description Worded member-count summary, e.g. "a few dozen members". Spaces do not publish exact counts. */
             memberCountSummary: string;
-            /** @description Whether the user pinned this space to the top of their profile. Pinned spaces come first in the array. */
+            /** @description Whether the user pinned this space. Pinned spaces come first. */
             pinned: boolean;
-            /** @description The user's own short note about this space, or null. Only ever set when pinned. */
+            /** @description The user's note about this space, or null. Set only when pinned. */
             pinMessage: string | null;
             /** @description When the user pinned this space (ISO 8601 UTC), or null when not pinned. */
             pinnedAt: string | null;
         };
-        /** @description A terse pinned-space card on a directory listing row */
+        /**
+         * @description A terse pinned-space card on a directory listing row
+         * @example {
+         *       "did": "did:dfos:9ctvrdn9vedda7efetrhcdakfh4cr2k",
+         *       "domain": "home",
+         *       "displayName": "DFOS",
+         *       "avatarUrl": "https://dfos.imgix.net/media/public/8e87h8c37f2vz3v6h7h3at-frame-143726546.png"
+         *     }
+         */
         PublicUserSpaceCardOutput: {
             did: components["schemas"]["ProtocolDid"];
-            /** @description Effective subdomain — custom domain if set, otherwise the normalized `space-{id}` form. A mutable alias. */
+            /** @description Effective subdomain — custom domain if set, otherwise the `space-{id}` form. A mutable alias. */
             domain: string;
             /** @description Space display name, or null */
             displayName: string | null;
-            /** @description Resolved public CDN URL for the space avatar, or null */
+            /** @description Public CDN URL for the space avatar, or null */
             avatarUrl: string | null;
         };
-        /** @description A cursor-paginated page of a user's public spaces */
+        /**
+         * @description A cursor-paginated page of a user's public spaces
+         * @example {
+         *       "items": [
+         *         {
+         *           "id": "space_vnzfk7hth9vadc3daahd48",
+         *           "did": "did:dfos:9ctvrdn9vedda7efetrhcdakfh4cr2k",
+         *           "domain": "home",
+         *           "displayName": "DFOS",
+         *           "avatarUrl": "https://dfos.imgix.net/media/public/8e87h8c37f2vz3v6h7h3at-frame-143726546.png",
+         *           "memberCountSummary": "thousands of members",
+         *           "pinned": true,
+         *           "pinMessage": "Where I write about what we are building.",
+         *           "pinnedAt": "2026-08-14T16:41:07.882Z"
+         *         },
+         *         {
+         *           "id": "space_z94a849d9kdftfvv3n9hn7",
+         *           "did": "did:dfos:f3a4ncdta66627c6e2cnhhndan7k882",
+         *           "domain": "rakowwwski",
+         *           "displayName": "POPULAR",
+         *           "avatarUrl": "https://dfos.imgix.net/media/public/e2nfc34a369da2tfatcvf4-32351ed8-9995-48b3-ad72-1ac2fda11f47-1024x1024-2-.jpg",
+         *           "memberCountSummary": "about a dozen members",
+         *           "pinned": false,
+         *           "pinMessage": null,
+         *           "pinnedAt": null
+         *         }
+         *       ],
+         *       "nextCursor": null,
+         *       "previousCursor": null,
+         *       "totalCount": 2
+         *     }
+         */
         PublicUserSpacePageOutput: {
             /** @description Page of a user's public spaces */
             items: components["schemas"]["PublicUserSpaceOutput"][];
-            /** @description Opaque cursor for the next page (null if no more results forward). Pass back verbatim as `after`; do not parse. */
+            /** @description Cursor for the next page, or null at the end. Pass back verbatim as `after`. */
             nextCursor: string | null;
-            /** @description Opaque cursor for the previous page (null if at the beginning). Optional — may be omitted on responses that do not support backward paging. Pass back verbatim as `before`; do not parse. */
+            /** @description Cursor for the previous page, or null at the start. Pass back verbatim as `before`. Omitted where backward paging is unsupported. */
             previousCursor?: string | null;
-            /** @description Total count of matching items (null if not computed). Optional — may be omitted entirely; clients must not depend on its presence. */
+            /** @description Total matching items, or null when not computed. May be omitted; do not depend on its presence. */
             totalCount?: number | null;
         };
-        /** @description A public post, or a gated space CTA when it is not anonymously readable */
+        /**
+         * @description A readable post, or a space CTA when it is gated
+         * @example {
+         *       "state": "eligible",
+         *       "post": {
+         *         "id": "post_ze2kh2d47tzerkhet8348c",
+         *         "slug": "dfos-beyond-dfos-sign-in-domains-and-your-own-keys",
+         *         "format": "long-post",
+         *         "title": "DFOS beyond DFOS: sign-in, domains, and your own keys",
+         *         "displayTitle": "DFOS beyond DFOS: sign-in, domains, and your own keys",
+         *         "excerpt": "Platforms today make your identity real by hosting it. Your @ is real because it appears on their domain. Your work is real because their page says it is...",
+         *         "body": "Platforms today make your identity real by hosting it. Your @ is real because it appears on their domain. Your work is real because their page says it is.\n\nDFOS is built around a different split: the platform is where convenience lives, and the protocol is where continuity lives.",
+         *         "cover": {
+         *           "id": "media_efrvdarnc6zd3nhv389cf2",
+         *           "filename": "p04.jpg",
+         *           "url": "https://dfos.imgix.net/media/public/efrvdarnc6zd3nhv389cf2-p04.jpg",
+         *           "contentType": "image/jpeg",
+         *           "contentLength": 2890442,
+         *           "width": 2752,
+         *           "height": 1536,
+         *           "blurHash": "eJ7ekWt%8{RQ.7tQoyWBfRoy8yVu?atQIBM{WBt7j[Rj%Lf8MyV[s;"
+         *         },
+         *         "attachments": [],
+         *         "bodyMedia": [
+         *           {
+         *             "id": "media_rn2926ahdrnra6t4erc862",
+         *             "filename": "2026-09-04-siwd-consent-composite-equal-height.png",
+         *             "url": "https://dfos.imgix.net/media/public/rn2926ahdrnra6t4erc862-2026-09-04-siwd-consent-composite-equal-height.png",
+         *             "contentType": "image/png",
+         *             "contentLength": 273173,
+         *             "width": 2116,
+         *             "height": 1160,
+         *             "blurHash": "eRS6Pl%Mt7%May~qWBWBt7WBxuayWBofj[%Mxut7Rjj[-;WBWBt7ay"
+         *           }
+         *         ],
+         *         "author": {
+         *           "did": "did:dfos:z8zt7ecn9h8n782kae3k796crva2c73",
+         *           "displayName": "Brandon",
+         *           "username": "bvalosek",
+         *           "avatarUrl": "https://dfos.imgix.net/media/public/ekceek9z64vz4cavrzr7v2-lil-robo-pfp.png"
+         *         },
+         *         "topics": [
+         *           {
+         *             "id": "topic_6c2efd472dvt8rf9k4ftcc",
+         *             "name": "DFOS Blog"
+         *           }
+         *         ],
+         *         "canonicalUri": "https://home.dfos.com/post/dfos-beyond-dfos-sign-in-domains-and-your-own-keys-ze2kh2d47tzerkhet8348c",
+         *         "protocol": {
+         *           "contentId": "d4743469vf6heca8t466ckknvzknha2",
+         *           "headOpCid": "bafyreiaztsa2wm76vu2t7nchqnpg3nl6jkydxolikj62ywwl3geccbbeby"
+         *         },
+         *         "upvoteCount": 14,
+         *         "commentCount": 6,
+         *         "publishedAt": "2026-09-04T18:05:33.531Z",
+         *         "updatedAt": "2026-09-04T18:06:01.020Z"
+         *       },
+         *       "space": {
+         *         "displayName": "DFOS",
+         *         "description": "The official DFOS of DFOS",
+         *         "avatarUrl": "https://dfos.imgix.net/media/public/8e87h8c37f2vz3v6h7h3at-frame-143726546.png",
+         *         "domain": "home",
+         *         "joinMode": "open",
+         *         "subscribeEnabled": true,
+         *         "memberCountSummary": "thousands of members"
+         *       }
+         *     }
+         * @example {
+         *       "state": "gated",
+         *       "reason": "spaceMembers",
+         *       "space": {
+         *         "displayName": "DFOS",
+         *         "description": "The official DFOS of DFOS",
+         *         "avatarUrl": "https://dfos.imgix.net/media/public/8e87h8c37f2vz3v6h7h3at-frame-143726546.png",
+         *         "domain": "home",
+         *         "joinMode": "open",
+         *         "subscribeEnabled": true,
+         *         "memberCountSummary": "thousands of members"
+         *       }
+         *     }
+         */
         PublicGetPostOutput: {
             /**
-             * @description The post is anonymously readable — `post` carries the full public content.
+             * @description The caller can read the post; `post` carries its content.
              * @constant
              */
             state: "eligible";
@@ -2236,35 +3357,50 @@ export interface components {
             space: components["schemas"]["PublicSpaceCtaOutput"];
         } | {
             /**
-             * @description The post exists in this public space but is not anonymously readable — no content is returned, only a slim space CTA.
+             * @description The post exists in this space but the caller cannot read it; only a space CTA is returned.
              * @constant
              */
             state: "gated";
             /**
-             * @description Why the post is gated. `signIn` — open to any signed-in visitor, so signing in reveals it (a sign-in wall, e.g. a `non-members` override). `spaceMembers` — plain space membership is sufficient to read, so joining the space grants access. `restricted` — a finer gate applies (a pass, a group, a private topic tier, etc.); joining the space is NOT enough on its own — visit the space to see how to gain access. Treat this as an open enum: finer reason values may be ADDED later, so handle an unrecognized value as `restricted`.
+             * @description Why the post is gated: `signIn` (sign in to read it), `spaceMembers` (join the space), or `restricted` (a pass, group, or private topic). Open enum; unknown means `restricted`.
              * @enum {string}
              */
             reason: "signIn" | "spaceMembers" | "restricted";
             space: components["schemas"]["PublicSpaceCtaOutput"];
         };
-        /** @description DFOS protocol discovery info */
+        /**
+         * @description DFOS protocol discovery info
+         * @example {
+         *       "relayUrl": "https://relay.dfos.com",
+         *       "didMethod": "did:dfos",
+         *       "specUrl": "https://protocol.dfos.com/spec",
+         *       "endpoints": {
+         *         "wellKnown": "https://relay.dfos.com/.well-known/dfos-relay",
+         *         "identity": "https://relay.dfos.com/proof/v1/identities/{did}",
+         *         "identityLog": "https://relay.dfos.com/proof/v1/identities/{did}/log",
+         *         "content": "https://relay.dfos.com/proof/v1/content/{contentId}",
+         *         "contentLog": "https://relay.dfos.com/proof/v1/content/{contentId}/log",
+         *         "operation": "https://relay.dfos.com/proof/v1/operations/{cid}",
+         *         "blob": "https://relay.dfos.com/content/{contentId}/blob",
+         *         "indexContent": "https://relay.dfos.com/index/v0/content",
+         *         "indexIdentities": "https://relay.dfos.com/index/v0/identities"
+         *       }
+         *     }
+         */
         PublicProtocolInfoOutput: {
-            /**
-             * @description Base URL of the read-only DFOS relay serving the identity and content chains for the protocol DIDs this API emits (as `did` on spaces, authors, and future entities). Combine with a `did` to resolve its DID document / identity-chain head (e.g. `{relayUrl}/proof/v1/identities/{did}`). One relay per deployment stage.
-             * @example https://relay.dfos.com
-             */
+            /** @description Base URL of the read-only relay serving the chains for the DIDs this API emits. Combine it with a `did` (e.g. `{relayUrl}/proof/v1/identities/{did}`). */
             relayUrl: string;
             /**
-             * @description The DID method used by DFOS protocol identities
+             * @description The DID method DFOS identities use
              * @constant
              */
             didMethod: "did:dfos";
             /**
-             * @description Canonical DFOS protocol specification URL
+             * @description The DFOS protocol specification URL
              * @constant
              */
             specUrl: "https://protocol.dfos.com/spec";
-            /** @description Templates for the relay's proof-plane and index endpoints; substitute the placeholders with values from `protocol` blocks on posts, users, and spaces. */
+            /** @description URL templates for the relay proof plane and indexes. Substitute placeholders with values from the `protocol` blocks on posts, users, and spaces. */
             endpoints: {
                 /** @description Relay discovery document URL */
                 wellKnown: string;
@@ -2286,15 +3422,32 @@ export interface components {
                 indexIdentities: string;
             };
         };
-        /** @description A space the credential subject belongs to */
+        /**
+         * @description A space the subject belongs to
+         * @example {
+         *       "id": "space_vnzfk7hth9vadc3daahd48",
+         *       "did": "did:dfos:9ctvrdn9vedda7efetrhcdakfh4cr2k",
+         *       "domain": "home",
+         *       "displayName": "DFOS",
+         *       "description": "The official DFOS of DFOS",
+         *       "avatarUrl": "https://dfos.imgix.net/media/public/8e87h8c37f2vz3v6h7h3at-frame-143726546.png",
+         *       "links": [
+         *         {
+         *           "url": "https://dfos.com/",
+         *           "label": null,
+         *           "title": "Dark Forest OS",
+         *           "description": null,
+         *           "imageUrl": "https://dfos.imgix.net/media/public/ne979cake8har94728rne7-dfos-private-internet.png"
+         *         }
+         *       ],
+         *       "memberCountSummary": "thousands of members"
+         *     }
+         */
         MembershipSpaceOutput: {
-            /**
-             * @description The space's entity id (`space_…`) — canonical and stable.
-             * @example space_6encc4akrze2ah9kntzd9t
-             */
+            /** @description The space's entity id (`space_…`) — canonical and stable. */
             id: string;
             did: components["schemas"]["ProtocolDid"];
-            /** @description Effective subdomain — custom domain if set, otherwise the normalized `space-{id}` form. A MUTABLE alias, and for a private space it may not resolve publicly at all; the `id` and `did` are canonical. */
+            /** @description Effective subdomain, or the normalized `space-{id}` form. A mutable alias that may not resolve publicly for a private space; `id` and `did` are canonical. */
             domain: string;
             /** @description Space display name, or null */
             displayName: string | null;
@@ -2304,15 +3457,25 @@ export interface components {
             avatarUrl: string | null;
             /** @description Ordered space profile links (may be empty) */
             links: components["schemas"]["PublicProfileLinkOutput"][];
-            /** @description Worded member-count summary (e.g. "a few dozen members"). DFOS surfaces deliberately avoid exact counts. */
+            /** @description Worded member-count summary, e.g. "a few dozen members". Spaces do not publish exact counts. */
             memberCountSummary: string;
         };
-        /** @description A group the credential subject belongs to */
+        /**
+         * @description A group the subject belongs to
+         * @example {
+         *       "id": "group_4kt7cn9vza3fe2h8dr6ac4",
+         *       "did": "did:dfos:7ha4dr2kc9vt3fe8n6zad4hcv7t2en9",
+         *       "name": "Developers",
+         *       "description": "Building on the DFOS API and protocol.",
+         *       "avatarUrl": null,
+         *       "color": "cyan",
+         *       "memberCount": 42,
+         *       "spaceId": "space_vnzfk7hth9vadc3daahd48",
+         *       "spaceDid": "did:dfos:9ctvrdn9vedda7efetrhcdakfh4cr2k"
+         *     }
+         */
         MembershipGroupOutput: {
-            /**
-             * @description The group's entity id (`group_…`) — canonical and stable.
-             * @example group_79h6z77had2kc68ffdkhac
-             */
+            /** @description The group's entity id (`group_…`) — canonical and stable. */
             id: string;
             did: components["schemas"]["ProtocolDid"];
             /** @description Group name */
@@ -2323,23 +3486,42 @@ export interface components {
             avatarUrl: string | null;
             /** @description The group's named palette color, or null when unset */
             color: ("red" | "orange" | "amber" | "yellow" | "lime" | "green" | "emerald" | "teal" | "cyan" | "sky" | "blue" | "indigo" | "violet" | "purple" | "fuchsia" | "pink" | "rose") | null;
-            /**
-             * @description EXACT count of the group's active members — not a worded bucket. Spaces publish a worded `memberCountSummary` because a room's population is ambient; a group is an operational unit (the editors, the moderators, a paid tier) whose size has a real answer its own members already know. Reading it requires the `read:memberships` grant that opens this endpoint.
-             * @example 7
-             */
+            /** @description Exact count of the group's active members. Groups publish an exact count; spaces publish the worded `memberCountSummary` instead. */
             memberCount: number;
-            /**
-             * @description Entity id of the space this group belongs to. Correlate with `space.id` on `GET /memberships` to reassemble the full graph.
-             * @example space_6encc4akrze2ah9kntzd9t
-             */
+            /** @description Entity id of the space this group belongs to. Correlate with `space.id` on `GET /memberships`. */
             spaceId: string;
             /**
              * @description Protocol DID of the space this group belongs to — the space's own `did`.
-             * @example did:dfos:6encc4akrze2ah9kntzd9tc8zr24crc
+             * @example did:dfos:9ctvrdn9vedda7efetrhcdakfh4cr2k
              */
             spaceDid: string;
         };
-        /** @description One of the credential subject's space memberships */
+        /**
+         * @description One of the subject's space memberships
+         * @example {
+         *       "space": {
+         *         "id": "space_vnzfk7hth9vadc3daahd48",
+         *         "did": "did:dfos:9ctvrdn9vedda7efetrhcdakfh4cr2k",
+         *         "domain": "home",
+         *         "displayName": "DFOS",
+         *         "description": "The official DFOS of DFOS",
+         *         "avatarUrl": "https://dfos.imgix.net/media/public/8e87h8c37f2vz3v6h7h3at-frame-143726546.png",
+         *         "links": [
+         *           {
+         *             "url": "https://dfos.com/",
+         *             "label": null,
+         *             "title": "Dark Forest OS",
+         *             "description": null,
+         *             "imageUrl": "https://dfos.imgix.net/media/public/ne979cake8har94728rne7-dfos-private-internet.png"
+         *           }
+         *         ],
+         *         "memberCountSummary": "thousands of members"
+         *       },
+         *       "role": "member",
+         *       "groupCount": 1,
+         *       "joinedAt": "2026-01-14T19:02:11.000Z"
+         *     }
+         */
         MembershipOutput: {
             space: components["schemas"]["MembershipSpaceOutput"];
             /**
@@ -2347,10 +3529,7 @@ export interface components {
              * @enum {string}
              */
             role: "owner" | "admin" | "member";
-            /**
-             * @description How many groups the subject belongs to inside this space (ACTIVE group memberships only). Often 0 — most members belong to no group. Walk `GET /group-memberships?space=…` for the groups themselves.
-             * @example 2
-             */
+            /** @description How many groups the subject belongs to inside this space. Walk `GET /group-memberships?space=…` for the groups. */
             groupCount: number;
             /**
              * Format: date-time
@@ -2358,18 +3537,82 @@ export interface components {
              */
             joinedAt: string;
         };
-        /** @description A cursor-paginated page of the credential subject's space memberships */
+        /**
+         * @description A cursor-paginated page of the subject's space memberships
+         * @example {
+         *       "items": [
+         *         {
+         *           "space": {
+         *             "id": "space_vnzfk7hth9vadc3daahd48",
+         *             "did": "did:dfos:9ctvrdn9vedda7efetrhcdakfh4cr2k",
+         *             "domain": "home",
+         *             "displayName": "DFOS",
+         *             "description": "The official DFOS of DFOS",
+         *             "avatarUrl": "https://dfos.imgix.net/media/public/8e87h8c37f2vz3v6h7h3at-frame-143726546.png",
+         *             "links": [
+         *               {
+         *                 "url": "https://dfos.com/",
+         *                 "label": null,
+         *                 "title": "Dark Forest OS",
+         *                 "description": null,
+         *                 "imageUrl": "https://dfos.imgix.net/media/public/ne979cake8har94728rne7-dfos-private-internet.png"
+         *               }
+         *             ],
+         *             "memberCountSummary": "thousands of members"
+         *           },
+         *           "role": "member",
+         *           "groupCount": 1,
+         *           "joinedAt": "2026-01-14T19:02:11.000Z"
+         *         },
+         *         {
+         *           "space": {
+         *             "id": "space_z94a849d9kdftfvv3n9hn7",
+         *             "did": "did:dfos:f3a4ncdta66627c6e2cnhhndan7k882",
+         *             "domain": "rakowwwski",
+         *             "displayName": "POPULAR",
+         *             "description": "Popular is a space we share our creative process and research practices. We get to know our work to get to know ourselves.",
+         *             "avatarUrl": "https://dfos.imgix.net/media/public/e2nfc34a369da2tfatcvf4-32351ed8-9995-48b3-ad72-1ac2fda11f47-1024x1024-2-.jpg",
+         *             "links": [],
+         *             "memberCountSummary": "about a dozen members"
+         *           },
+         *           "role": "member",
+         *           "groupCount": 0,
+         *           "joinedAt": "2026-04-02T13:35:52.000Z"
+         *         }
+         *       ],
+         *       "nextCursor": null,
+         *       "previousCursor": null,
+         *       "totalCount": 2
+         *     }
+         */
         MembershipPageOutput: {
             /** @description Page of the subject's space memberships */
             items: components["schemas"]["MembershipOutput"][];
-            /** @description Opaque cursor for the next page (null if no more results forward). Pass back verbatim as `after`; do not parse. */
+            /** @description Cursor for the next page, or null at the end. Pass back verbatim as `after`. */
             nextCursor: string | null;
-            /** @description Opaque cursor for the previous page (null if at the beginning). Optional — may be omitted on responses that do not support backward paging. Pass back verbatim as `before`; do not parse. */
+            /** @description Cursor for the previous page, or null at the start. Pass back verbatim as `before`. Omitted where backward paging is unsupported. */
             previousCursor?: string | null;
-            /** @description Total count of matching items (null if not computed). Optional — may be omitted entirely; clients must not depend on its presence. */
+            /** @description Total matching items, or null when not computed. May be omitted; do not depend on its presence. */
             totalCount?: number | null;
         };
-        /** @description One of the credential subject's group memberships */
+        /**
+         * @description One of the subject's group memberships
+         * @example {
+         *       "group": {
+         *         "id": "group_4kt7cn9vza3fe2h8dr6ac4",
+         *         "did": "did:dfos:7ha4dr2kc9vt3fe8n6zad4hcv7t2en9",
+         *         "name": "Developers",
+         *         "description": "Building on the DFOS API and protocol.",
+         *         "avatarUrl": null,
+         *         "color": "cyan",
+         *         "memberCount": 42,
+         *         "spaceId": "space_vnzfk7hth9vadc3daahd48",
+         *         "spaceDid": "did:dfos:9ctvrdn9vedda7efetrhcdakfh4cr2k"
+         *       },
+         *       "role": "admin",
+         *       "joinedAt": "2026-01-14T19:02:11.000Z"
+         *     }
+         */
         GroupMembershipOutput: {
             group: components["schemas"]["MembershipGroupOutput"];
             /**
@@ -2383,68 +3626,96 @@ export interface components {
              */
             joinedAt: string;
         };
-        /** @description A cursor-paginated page of the credential subject's group memberships */
+        /**
+         * @description A cursor-paginated page of the subject's group memberships
+         * @example {
+         *       "items": [
+         *         {
+         *           "group": {
+         *             "id": "group_4kt7cn9vza3fe2h8dr6ac4",
+         *             "did": "did:dfos:7ha4dr2kc9vt3fe8n6zad4hcv7t2en9",
+         *             "name": "Developers",
+         *             "description": "Building on the DFOS API and protocol.",
+         *             "avatarUrl": null,
+         *             "color": "cyan",
+         *             "memberCount": 42,
+         *             "spaceId": "space_vnzfk7hth9vadc3daahd48",
+         *             "spaceDid": "did:dfos:9ctvrdn9vedda7efetrhcdakfh4cr2k"
+         *           },
+         *           "role": "admin",
+         *           "joinedAt": "2026-01-14T19:02:11.000Z"
+         *         }
+         *       ],
+         *       "nextCursor": null,
+         *       "previousCursor": null,
+         *       "totalCount": 1
+         *     }
+         */
         GroupMembershipPageOutput: {
             /** @description Page of the subject's group memberships */
             items: components["schemas"]["GroupMembershipOutput"][];
-            /** @description Opaque cursor for the next page (null if no more results forward). Pass back verbatim as `after`; do not parse. */
+            /** @description Cursor for the next page, or null at the end. Pass back verbatim as `after`. */
             nextCursor: string | null;
-            /** @description Opaque cursor for the previous page (null if at the beginning). Optional — may be omitted on responses that do not support backward paging. Pass back verbatim as `before`; do not parse. */
+            /** @description Cursor for the previous page, or null at the start. Pass back verbatim as `before`. Omitted where backward paging is unsupported. */
             previousCursor?: string | null;
-            /** @description Total count of matching items (null if not computed). Optional — may be omitted entirely; clients must not depend on its presence. */
+            /** @description Total matching items, or null when not computed. May be omitted; do not depend on its presence. */
             totalCount?: number | null;
         };
         /**
-         * @description How the application was resolved when this credential was issued. `jit` = resolved live from the app's `/.well-known/dfos-app.json`, which is how every domain-backed app resolves — there is no registry and no approval gate. `loopback` = the key-proven local tier: a client on somebody's machine that proved it holds the key the grant is addressed to. An open enum like every enum on this API: a member named `approved` existed in an earlier revision and was removed with the registry that backed it; no credential was ever issued under it.
+         * @description How the application was resolved at consent time. `jit` = live from its `/.well-known/dfos-app.json`; `loopback` = a local client that proved its key. Open enum.
          * @enum {string}
          */
         PublicCredentialTier: "jit" | "loopback";
-        /** @description The presented credential, as the DFOS issuance ledger records it */
+        /**
+         * @description The presented credential.
+         * @example {
+         *       "subjectDid": "did:dfos:z8zt7ecn9h8n782kae3k796crva2c73",
+         *       "clientDid": "did:dfos:7ken2dr4ahc9vtfz3n8ce6ad2kr7h9t",
+         *       "scopes": [
+         *         "read:profile",
+         *         "read:email",
+         *         "read:memberships",
+         *         "read:posts",
+         *         "write:posts"
+         *       ],
+         *       "attenuation": [
+         *         {
+         *           "resource": "api:api.dfos.com",
+         *           "action": "read:profile,read:email,read:memberships"
+         *         },
+         *         {
+         *           "resource": "api:api.dfos.com/spaces/9ctvrdn9vedda7efetrhcdakfh4cr2k",
+         *           "action": "read:posts,write:posts"
+         *         }
+         *       ],
+         *       "tier": "jit",
+         *       "domain": "fieldnotes.example",
+         *       "issuedAt": "2026-09-01T16:20:00.000Z",
+         *       "expiresAt": "2026-11-30T16:20:00.000Z"
+         *     }
+         */
         CredentialIntrospectionOutput: {
             /**
-             * @description Protocol DID of the user who ISSUED this credential — the subject every gated route serves. The same `did` `GET /profile` returns.
-             * @example did:dfos:6encc4akrze2ah9kntzd9tc8zr24crc
+             * @description Protocol DID of the user who issued this credential — the subject every gated route serves.
+             * @example did:dfos:9ctvrdn9vedda7efetrhcdakfh4cr2k
              */
             subjectDid: string;
             /**
-             * @description Protocol DID of the application this credential was issued TO — the audience. A credential is inert without this identity’s key; it is not a bearer token.
-             * @example did:dfos:6encc4akrze2ah9kntzd9tc8zr24crc
+             * @description Protocol DID of the application this credential was issued to. Not a bearer token: inert without that identity’s key.
+             * @example did:dfos:9ctvrdn9vedda7efetrhcdakfh4cr2k
              */
             clientDid: string;
-            /**
-             * @description The actions this grant carries, e.g. `["read:profile","read:memberships"]`, in DFOS’s canonical order. This is the authoritative list — a route refuses with `403` when the action it needs is absent here. Treat unrecognized members as opaque strings.
-             * @example [
-             *       "read:profile",
-             *       "read:memberships"
-             *     ]
-             */
+            /** @description The actions this grant carries, e.g. `["read:profile","read:memberships"]`. A route refuses with `403` when the action it needs is absent. Unrecognized members are opaque strings. */
             scopes: string[];
-            /**
-             * @description THE GRANT ITSELF, exactly as it was signed — one entry per resource. `scopes` above says WHAT this credential carries; this says what it carries WHERE, and it is the authoritative answer to both. A credential minted before grants had places carries a single `api:<host>` entry; one narrowed to specific spaces carries one child entry each, and may carry no `api:<host>` entry at all. Treat unrecognized resource forms as opaque strings and do not infer coverage from their shape — the grant you hold is the authority, not a rule you derived from it.
-             * @example [
-             *       {
-             *         "resource": "api:api.dfos.com",
-             *         "action": "read:profile,read:email"
-             *       }
-             *     ]
-             */
+            /** @description The grant as signed, one entry per resource: `scopes` says what this credential carries, this says where. Treat unrecognized resource forms as opaque strings. */
             attenuation: {
-                /**
-                 * @description The resource this entry grants over. `api:<host>` is the whole API — for a space-level action that means EVERY space the user belongs to, including ones they join later. `api:<host>/spaces/<31-char space id>` is one named space.
-                 * @example api:api.dfos.com
-                 */
+                /** @description The resource this entry grants over. `api:<host>` is the whole API, including spaces the user joins later; `api:<host>/spaces/<space id>` is one space. */
                 resource: string;
-                /**
-                 * @description The comma-separated SET of action tokens this entry carries, in DFOS’s canonical order.
-                 * @example read:profile,read:email
-                 */
+                /** @description Comma-separated set of action tokens this entry carries, in canonical order. */
                 action: string;
             }[];
             tier: components["schemas"]["PublicCredentialTier"];
-            /**
-             * @description Bare hostname the grant was issued to, or `null`. **A null domain means a LOCAL application** — the `loopback` tier has no domain because a local client proved a key rather than an origin, so there is no hostname that would be true to show. Fall back to `clientDid` rather than inventing one.
-             * @example example.com
-             */
+            /** @description Bare hostname the grant was issued to, or `null`. Null on the `loopback` tier, which proved a key rather than an origin; identify the holder by `clientDid`. */
             domain: string | null;
             /**
              * Format: date-time
@@ -2453,12 +3724,285 @@ export interface components {
             issuedAt: string;
             /**
              * Format: date-time
-             * @description When this credential lapses on its own (ISO 8601 UTC). Expiry is the backstop, not the lever: a user revoking a grant ends it on the app’s very next request, long before this.
+             * @description When this credential lapses on its own (ISO 8601 UTC). A revoked grant ends sooner, on the app’s next request.
              */
             expiresAt: string;
         };
+        /** @description The one error envelope every non-2xx response carries. Additional members are permitted and must be tolerated: the wire also carries a transport marker `defined`, which is an oRPC client concern rather than part of this contract. */
+        ErrorEnvelope: {
+            /** @description A stable machine-readable error code, e.g. `E_NOT_FOUND`. This and `status` are what a client branches on. */
+            code: string;
+            /** @description The HTTP status, repeated in the body. */
+            status: number;
+            /** @description A human-readable explanation, safe to log and to show a developer. NOT part of the contract — the wording of any given refusal can change, so never branch on it. */
+            message: string;
+            /** @description Machine-readable detail; shape depends on `code` */
+            data?: unknown;
+        };
     };
-    responses: never;
+    responses: {
+        /** @description Not found. A missing space and a non-public one return the same 404, so the two are indistinguishable. */
+        NotFound: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "code": "E_NOT_FOUND",
+                 *       "status": 404,
+                 *       "message": "Cannot resolve space -- not found"
+                 *     }
+                 */
+                "application/json": {
+                    /** @constant */
+                    code: "E_NOT_FOUND";
+                    /** @constant */
+                    status: 404;
+                    message: string;
+                };
+            };
+        };
+        /** @description Not found. "No such space or group" and "the granting user is not in it" are the same answer — this credential discloses the user's own memberships and nothing else. */
+        MembershipNotFound: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "code": "E_NOT_FOUND",
+                 *       "status": 404,
+                 *       "message": "Not found"
+                 *     }
+                 */
+                "application/json": {
+                    /** @constant */
+                    code: "E_NOT_FOUND";
+                    /** @constant */
+                    status: 404;
+                    message: string;
+                };
+            };
+        };
+        /** @description The request could not be acted on as sent: an edit that names nothing to change, a body that fails validation, or a field this API does not serve. Request bodies are closed — an unknown member is refused, not ignored. */
+        BadRequest: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "code": "E_INVALID_REQUEST",
+                 *       "status": 400,
+                 *       "message": "Nothing to edit"
+                 *     }
+                 */
+                "application/json": {
+                    /** @constant */
+                    code: "E_INVALID_REQUEST";
+                    /** @constant */
+                    status: 400;
+                    message: string;
+                };
+            };
+        };
+        /** @description The request was refused. Unknown, expired, spent and wrong-nonce ceremonies all answer "this ceremony is not open"; only a bad signature consumes the ceremony, so any other refusal leaves the code live to re-resolve and retry. */
+        KeyProofRejected: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "code": "E_INVALID_REQUEST",
+                 *       "status": 400,
+                 *       "message": "this ceremony is not open"
+                 *     }
+                 */
+                "application/json": {
+                    /** @constant */
+                    code: "E_INVALID_REQUEST";
+                    /** @constant */
+                    status: 400;
+                    message: string;
+                };
+            };
+        };
+        /** @description The DFOS request proof was missing, malformed, stale, or did not verify. Sign a fresh proof over this exact method, host, path, and body; `WWW-Authenticate` is best-effort — infrastructure between your client and this API can rename or drop it — so branch on the status and the error body. */
+        ProofRequired: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "code": "E_AUTHENTICATION_FAILED",
+                 *       "status": 401,
+                 *       "message": "a DFOS request proof is required for this endpoint"
+                 *     }
+                 */
+                "application/json": {
+                    /** @constant */
+                    code: "E_AUTHENTICATION_FAILED";
+                    /** @constant */
+                    status: 401;
+                    message: string;
+                };
+            };
+        };
+        /** @description The request proof verified but the credential does not authorize this request — it is expired, revoked, not issued by this platform, or its attenuation does not cover this action on this host. */
+        Forbidden: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "code": "E_UNAUTHORIZED",
+                 *       "status": 403,
+                 *       "message": "credential has been revoked"
+                 *     }
+                 */
+                "application/json": {
+                    /** @constant */
+                    code: "E_UNAUTHORIZED";
+                    /** @constant */
+                    status: 403;
+                    message: string;
+                };
+            };
+        };
+        /** @description This `jti` was already accepted, so the first attempt may have succeeded. Re-read state before retrying, and retry with a new `jti`. */
+        Replayed: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "code": "E_CONFLICT",
+                 *       "status": 409,
+                 *       "message": "request already seen"
+                 *     }
+                 */
+                "application/json": {
+                    /** @constant */
+                    code: "E_CONFLICT";
+                    /** @constant */
+                    status: 409;
+                    message: string;
+                };
+            };
+        };
+        /** @description The request body exceeds the maximum size this endpoint will authenticate. */
+        PayloadTooLarge: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "code": "E_INVALID_REQUEST",
+                 *       "status": 413,
+                 *       "message": "Request body exceeds the maximum size this endpoint will authenticate."
+                 *     }
+                 */
+                "application/json": {
+                    /** @constant */
+                    code: "E_INVALID_REQUEST";
+                    /** @constant */
+                    status: 413;
+                    message: string;
+                };
+            };
+        };
+        /** @description A request body must be `application/json` (optionally `; charset=utf-8`) and must not carry a `Content-Encoding` other than `identity`. */
+        UnsupportedMediaType: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "code": "E_INVALID_REQUEST",
+                 *       "status": 415,
+                 *       "message": "Request bodies on this API must be `application/json` (optionally `; charset=utf-8`). Exactly one media type is served so that the octets a proof binds have exactly one parse."
+                 *     }
+                 */
+                "application/json": {
+                    /** @constant */
+                    code: "E_INVALID_REQUEST";
+                    /** @constant */
+                    status: 415;
+                    message: string;
+                };
+            };
+        };
+        /** @description Rate limit exceeded — retry after `retryAfterMs`. */
+        RateLimited: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "code": "E_RATE_LIMITED",
+                 *       "status": 429,
+                 *       "message": "Rate limit exceeded",
+                 *       "data": {
+                 *         "scope": "global",
+                 *         "retryAfterMs": 1200
+                 *       }
+                 *     }
+                 */
+                "application/json": {
+                    /** @constant */
+                    code: "E_RATE_LIMITED";
+                    /** @constant */
+                    status: 429;
+                    message: string;
+                    data: {
+                        /** @description Which per-IP budget was exhausted */
+                        scope: string;
+                        /** @description Milliseconds to wait before retrying */
+                        retryAfterMs: number;
+                    };
+                };
+            };
+        };
+        /** @description Service temporarily unavailable — this request could not be checked, so it was refused rather than allowed. Retry shortly. */
+        ServiceUnavailable: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "code": "E_SERVICE_UNAVAILABLE",
+                 *       "status": 503,
+                 *       "message": "Rate limit service temporarily unavailable"
+                 *     }
+                 */
+                "application/json": {
+                    /** @constant */
+                    code: "E_SERVICE_UNAVAILABLE";
+                    /** @constant */
+                    status: 503;
+                    message: string;
+                };
+            };
+        };
+        /** @description Any other error the API itself produces. Branch on `code` and `status`; the enumerated statuses on each operation are what this contract promises. An intermediary may answer with a non-JSON 5xx body — check `Content-Type` before parsing. */
+        Error: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorEnvelope"];
+            };
+        };
+    };
     parameters: never;
     requestBodies: never;
     headers: never;
@@ -2486,89 +4030,10 @@ export interface operations {
                     "application/json": components["schemas"]["SpaceOutput"];
                 };
             };
-            /** @description 404 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_NOT_FOUND";
-                        /** @constant */
-                        status: 404;
-                        /** @default Not found. A missing space and a non-public (private) one return a byte-identical 404 by design — the two are deliberately indistinguishable (no existence leak). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 429 */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_RATE_LIMITED";
-                        /** @constant */
-                        status: 429;
-                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
-                        message: string;
-                        data: {
-                            /** @description Which per-IP budget was exhausted */
-                            scope: string;
-                            /** @description Milliseconds to wait before retrying */
-                            retryAfterMs: number;
-                        };
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 503 */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_SERVICE_UNAVAILABLE";
-                        /** @constant */
-                        status: 503;
-                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["ServiceUnavailable"];
+            default: components["responses"]["Error"];
         };
     };
     "spaces.listSpaces": {
@@ -2597,63 +4062,9 @@ export interface operations {
                     "application/json": components["schemas"]["SpaceDiscoveryPageOutput"];
                 };
             };
-            /** @description 429 */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_RATE_LIMITED";
-                        /** @constant */
-                        status: 429;
-                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
-                        message: string;
-                        data: {
-                            /** @description Which per-IP budget was exhausted */
-                            scope: string;
-                            /** @description Milliseconds to wait before retrying */
-                            retryAfterMs: number;
-                        };
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 503 */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_SERVICE_UNAVAILABLE";
-                        /** @constant */
-                        status: 503;
-                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["ServiceUnavailable"];
+            default: components["responses"]["Error"];
         };
     };
     "posts.listPosts": {
@@ -2685,89 +4096,10 @@ export interface operations {
                     "application/json": components["schemas"]["PublicPostPageOutput"];
                 };
             };
-            /** @description 404 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_NOT_FOUND";
-                        /** @constant */
-                        status: 404;
-                        /** @default Not found. A missing space and a non-public (private) one return a byte-identical 404 by design — the two are deliberately indistinguishable (no existence leak). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 429 */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_RATE_LIMITED";
-                        /** @constant */
-                        status: 429;
-                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
-                        message: string;
-                        data: {
-                            /** @description Which per-IP budget was exhausted */
-                            scope: string;
-                            /** @description Milliseconds to wait before retrying */
-                            retryAfterMs: number;
-                        };
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 503 */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_SERVICE_UNAVAILABLE";
-                        /** @constant */
-                        status: 503;
-                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["ServiceUnavailable"];
+            default: components["responses"]["Error"];
         };
     };
     "posts.createPost": {
@@ -2783,13 +4115,13 @@ export interface operations {
             content: {
                 "application/json": {
                     /**
-                     * @description Topic ID to post into, from `GET /spaces/{space}/topics`. Required — this API never picks a topic for you, because which room a post lands in is a decision the writer makes.
-                     * @example topic_6encc4akrze2ah9kntzd9t
+                     * @description Topic ID to post into. `GET /spaces/{space}/topics` enumerates world-readable topics only, so it supplies ids for public spaces; for a member or private topic, take the id from `post.topics[]` on a credentialed read.
+                     * @example topic_6c2efd472dvt8rf9k4ftcc
                      */
                     topic: string;
                     /**
-                     * @description Post title. Its presence is what makes this a `long-post`; omit it for a `short-post`.
-                     * @example Building a more generous internet
+                     * @description Post title. Its presence makes the post a `long-post`.
+                     * @example DFOS beyond DFOS: sign-in, domains, and your own keys
                      */
                     title?: string;
                     /** @description Post body (markdown) */
@@ -2798,7 +4130,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description OK */
+            /** @description Created */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -2807,245 +4139,16 @@ export interface operations {
                     "application/json": components["schemas"]["PublicPostOutput"];
                 };
             };
-            /** @description 400 */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_INVALID_REQUEST";
-                        /** @constant */
-                        status: 400;
-                        /** @default The request could not be acted on as sent: an edit that names nothing to change, a body that fails validation, or a field this API does not serve (request bodies are closed, so an unknown member is refused rather than ignored). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 401 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_AUTHENTICATION_FAILED";
-                        /** @constant */
-                        status: 401;
-                        /** @default The DFOS request proof was missing, malformed, stale, or did not verify. Sign a fresh proof over this exact method, host, path, and body. Branch on this status and body: responses normally also carry a `WWW-Authenticate: DFOS` challenge header, but that header is best-effort and may arrive remapped, so it must not be the thing a client keys on. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 403 */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_UNAUTHORIZED";
-                        /** @constant */
-                        status: 403;
-                        /** @default The request proof verified but the credential does not authorize this request — it is expired, revoked, not issued by this platform, or its attenuation does not cover this action on this host. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 404 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_NOT_FOUND";
-                        /** @constant */
-                        status: 404;
-                        /** @default Not found. A missing space and a non-public (private) one return a byte-identical 404 by design — the two are deliberately indistinguishable (no existence leak). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 409 */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_CONFLICT";
-                        /** @constant */
-                        status: 409;
-                        /** @default This request was already seen — its `jti` was spent inside the proof freshness window. The earlier attempt may have succeeded, so re-read state instead of retrying. A genuine retry must carry a NEW `jti`. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 413 */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_INVALID_REQUEST";
-                        /** @constant */
-                        status: 413;
-                        /** @default The request body exceeds the maximum this endpoint will authenticate. A proof binds the body it was signed over, so an unhashable body cannot be authenticated at any size — the cap is refused before the signature is checked, not after. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 415 */
-            415: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_INVALID_REQUEST";
-                        /** @constant */
-                        status: 415;
-                        /** @default Unsupported media type. A request body must be `application/json` (optionally `; charset=utf-8`), and must not carry a `Content-Encoding` other than `identity` — a proof binds the raw request octets, and this API does not reverse an encoding before checking that binding. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 429 */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_RATE_LIMITED";
-                        /** @constant */
-                        status: 429;
-                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
-                        message: string;
-                        data: {
-                            /** @description Which per-IP budget was exhausted */
-                            scope: string;
-                            /** @description Milliseconds to wait before retrying */
-                            retryAfterMs: number;
-                        };
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 503 */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_SERVICE_UNAVAILABLE";
-                        /** @constant */
-                        status: 503;
-                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["ProofRequired"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Replayed"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["ServiceUnavailable"];
+            default: components["responses"]["Error"];
         };
     };
     "posts.getPost": {
@@ -3069,89 +4172,10 @@ export interface operations {
                     "application/json": components["schemas"]["PublicGetPostOutput"];
                 };
             };
-            /** @description 404 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_NOT_FOUND";
-                        /** @constant */
-                        status: 404;
-                        /** @default Not found. A missing space and a non-public (private) one return a byte-identical 404 by design — the two are deliberately indistinguishable (no existence leak). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 429 */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_RATE_LIMITED";
-                        /** @constant */
-                        status: 429;
-                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
-                        message: string;
-                        data: {
-                            /** @description Which per-IP budget was exhausted */
-                            scope: string;
-                            /** @description Milliseconds to wait before retrying */
-                            retryAfterMs: number;
-                        };
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 503 */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_SERVICE_UNAVAILABLE";
-                        /** @constant */
-                        status: 503;
-                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["ServiceUnavailable"];
+            default: components["responses"]["Error"];
         };
     };
     "posts.deletePost": {
@@ -3175,245 +4199,16 @@ export interface operations {
                     "application/json": components["schemas"]["PublicDeletedOutput"];
                 };
             };
-            /** @description 400 */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_INVALID_REQUEST";
-                        /** @constant */
-                        status: 400;
-                        /** @default The request could not be acted on as sent: an edit that names nothing to change, a body that fails validation, or a field this API does not serve (request bodies are closed, so an unknown member is refused rather than ignored). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 401 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_AUTHENTICATION_FAILED";
-                        /** @constant */
-                        status: 401;
-                        /** @default The DFOS request proof was missing, malformed, stale, or did not verify. Sign a fresh proof over this exact method, host, path, and body. Branch on this status and body: responses normally also carry a `WWW-Authenticate: DFOS` challenge header, but that header is best-effort and may arrive remapped, so it must not be the thing a client keys on. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 403 */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_UNAUTHORIZED";
-                        /** @constant */
-                        status: 403;
-                        /** @default The request proof verified but the credential does not authorize this request — it is expired, revoked, not issued by this platform, or its attenuation does not cover this action on this host. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 404 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_NOT_FOUND";
-                        /** @constant */
-                        status: 404;
-                        /** @default Not found. A missing space and a non-public (private) one return a byte-identical 404 by design — the two are deliberately indistinguishable (no existence leak). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 409 */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_CONFLICT";
-                        /** @constant */
-                        status: 409;
-                        /** @default This request was already seen — its `jti` was spent inside the proof freshness window. The earlier attempt may have succeeded, so re-read state instead of retrying. A genuine retry must carry a NEW `jti`. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 413 */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_INVALID_REQUEST";
-                        /** @constant */
-                        status: 413;
-                        /** @default The request body exceeds the maximum this endpoint will authenticate. A proof binds the body it was signed over, so an unhashable body cannot be authenticated at any size — the cap is refused before the signature is checked, not after. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 415 */
-            415: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_INVALID_REQUEST";
-                        /** @constant */
-                        status: 415;
-                        /** @default Unsupported media type. A request body must be `application/json` (optionally `; charset=utf-8`), and must not carry a `Content-Encoding` other than `identity` — a proof binds the raw request octets, and this API does not reverse an encoding before checking that binding. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 429 */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_RATE_LIMITED";
-                        /** @constant */
-                        status: 429;
-                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
-                        message: string;
-                        data: {
-                            /** @description Which per-IP budget was exhausted */
-                            scope: string;
-                            /** @description Milliseconds to wait before retrying */
-                            retryAfterMs: number;
-                        };
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 503 */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_SERVICE_UNAVAILABLE";
-                        /** @constant */
-                        status: 503;
-                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["ProofRequired"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Replayed"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["ServiceUnavailable"];
+            default: components["responses"]["Error"];
         };
     };
     "posts.editPost": {
@@ -3435,7 +4230,7 @@ export interface operations {
                     body?: string;
                     /**
                      * @description Move the post to this topic ID, within the same space.
-                     * @example topic_6encc4akrze2ah9kntzd9t
+                     * @example topic_6c2efd472dvt8rf9k4ftcc
                      */
                     topic?: string;
                 };
@@ -3451,245 +4246,16 @@ export interface operations {
                     "application/json": components["schemas"]["PublicPostOutput"];
                 };
             };
-            /** @description 400 */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_INVALID_REQUEST";
-                        /** @constant */
-                        status: 400;
-                        /** @default The request could not be acted on as sent: an edit that names nothing to change, a body that fails validation, or a field this API does not serve (request bodies are closed, so an unknown member is refused rather than ignored). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 401 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_AUTHENTICATION_FAILED";
-                        /** @constant */
-                        status: 401;
-                        /** @default The DFOS request proof was missing, malformed, stale, or did not verify. Sign a fresh proof over this exact method, host, path, and body. Branch on this status and body: responses normally also carry a `WWW-Authenticate: DFOS` challenge header, but that header is best-effort and may arrive remapped, so it must not be the thing a client keys on. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 403 */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_UNAUTHORIZED";
-                        /** @constant */
-                        status: 403;
-                        /** @default The request proof verified but the credential does not authorize this request — it is expired, revoked, not issued by this platform, or its attenuation does not cover this action on this host. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 404 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_NOT_FOUND";
-                        /** @constant */
-                        status: 404;
-                        /** @default Not found. A missing space and a non-public (private) one return a byte-identical 404 by design — the two are deliberately indistinguishable (no existence leak). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 409 */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_CONFLICT";
-                        /** @constant */
-                        status: 409;
-                        /** @default This request was already seen — its `jti` was spent inside the proof freshness window. The earlier attempt may have succeeded, so re-read state instead of retrying. A genuine retry must carry a NEW `jti`. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 413 */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_INVALID_REQUEST";
-                        /** @constant */
-                        status: 413;
-                        /** @default The request body exceeds the maximum this endpoint will authenticate. A proof binds the body it was signed over, so an unhashable body cannot be authenticated at any size — the cap is refused before the signature is checked, not after. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 415 */
-            415: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_INVALID_REQUEST";
-                        /** @constant */
-                        status: 415;
-                        /** @default Unsupported media type. A request body must be `application/json` (optionally `; charset=utf-8`), and must not carry a `Content-Encoding` other than `identity` — a proof binds the raw request octets, and this API does not reverse an encoding before checking that binding. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 429 */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_RATE_LIMITED";
-                        /** @constant */
-                        status: 429;
-                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
-                        message: string;
-                        data: {
-                            /** @description Which per-IP budget was exhausted */
-                            scope: string;
-                            /** @description Milliseconds to wait before retrying */
-                            retryAfterMs: number;
-                        };
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 503 */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_SERVICE_UNAVAILABLE";
-                        /** @constant */
-                        status: 503;
-                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["ProofRequired"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Replayed"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["ServiceUnavailable"];
+            default: components["responses"]["Error"];
         };
     };
     "posts.upvotePost": {
@@ -3713,245 +4279,16 @@ export interface operations {
                     "application/json": components["schemas"]["PublicUpvoteStateOutput"];
                 };
             };
-            /** @description 400 */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_INVALID_REQUEST";
-                        /** @constant */
-                        status: 400;
-                        /** @default The request could not be acted on as sent: an edit that names nothing to change, a body that fails validation, or a field this API does not serve (request bodies are closed, so an unknown member is refused rather than ignored). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 401 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_AUTHENTICATION_FAILED";
-                        /** @constant */
-                        status: 401;
-                        /** @default The DFOS request proof was missing, malformed, stale, or did not verify. Sign a fresh proof over this exact method, host, path, and body. Branch on this status and body: responses normally also carry a `WWW-Authenticate: DFOS` challenge header, but that header is best-effort and may arrive remapped, so it must not be the thing a client keys on. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 403 */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_UNAUTHORIZED";
-                        /** @constant */
-                        status: 403;
-                        /** @default The request proof verified but the credential does not authorize this request — it is expired, revoked, not issued by this platform, or its attenuation does not cover this action on this host. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 404 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_NOT_FOUND";
-                        /** @constant */
-                        status: 404;
-                        /** @default Not found. A missing space and a non-public (private) one return a byte-identical 404 by design — the two are deliberately indistinguishable (no existence leak). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 409 */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_CONFLICT";
-                        /** @constant */
-                        status: 409;
-                        /** @default This request was already seen — its `jti` was spent inside the proof freshness window. The earlier attempt may have succeeded, so re-read state instead of retrying. A genuine retry must carry a NEW `jti`. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 413 */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_INVALID_REQUEST";
-                        /** @constant */
-                        status: 413;
-                        /** @default The request body exceeds the maximum this endpoint will authenticate. A proof binds the body it was signed over, so an unhashable body cannot be authenticated at any size — the cap is refused before the signature is checked, not after. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 415 */
-            415: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_INVALID_REQUEST";
-                        /** @constant */
-                        status: 415;
-                        /** @default Unsupported media type. A request body must be `application/json` (optionally `; charset=utf-8`), and must not carry a `Content-Encoding` other than `identity` — a proof binds the raw request octets, and this API does not reverse an encoding before checking that binding. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 429 */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_RATE_LIMITED";
-                        /** @constant */
-                        status: 429;
-                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
-                        message: string;
-                        data: {
-                            /** @description Which per-IP budget was exhausted */
-                            scope: string;
-                            /** @description Milliseconds to wait before retrying */
-                            retryAfterMs: number;
-                        };
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 503 */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_SERVICE_UNAVAILABLE";
-                        /** @constant */
-                        status: 503;
-                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["ProofRequired"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Replayed"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["ServiceUnavailable"];
+            default: components["responses"]["Error"];
         };
     };
     "posts.removePostUpvote": {
@@ -3975,245 +4312,16 @@ export interface operations {
                     "application/json": components["schemas"]["PublicUpvoteStateOutput"];
                 };
             };
-            /** @description 400 */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_INVALID_REQUEST";
-                        /** @constant */
-                        status: 400;
-                        /** @default The request could not be acted on as sent: an edit that names nothing to change, a body that fails validation, or a field this API does not serve (request bodies are closed, so an unknown member is refused rather than ignored). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 401 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_AUTHENTICATION_FAILED";
-                        /** @constant */
-                        status: 401;
-                        /** @default The DFOS request proof was missing, malformed, stale, or did not verify. Sign a fresh proof over this exact method, host, path, and body. Branch on this status and body: responses normally also carry a `WWW-Authenticate: DFOS` challenge header, but that header is best-effort and may arrive remapped, so it must not be the thing a client keys on. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 403 */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_UNAUTHORIZED";
-                        /** @constant */
-                        status: 403;
-                        /** @default The request proof verified but the credential does not authorize this request — it is expired, revoked, not issued by this platform, or its attenuation does not cover this action on this host. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 404 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_NOT_FOUND";
-                        /** @constant */
-                        status: 404;
-                        /** @default Not found. A missing space and a non-public (private) one return a byte-identical 404 by design — the two are deliberately indistinguishable (no existence leak). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 409 */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_CONFLICT";
-                        /** @constant */
-                        status: 409;
-                        /** @default This request was already seen — its `jti` was spent inside the proof freshness window. The earlier attempt may have succeeded, so re-read state instead of retrying. A genuine retry must carry a NEW `jti`. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 413 */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_INVALID_REQUEST";
-                        /** @constant */
-                        status: 413;
-                        /** @default The request body exceeds the maximum this endpoint will authenticate. A proof binds the body it was signed over, so an unhashable body cannot be authenticated at any size — the cap is refused before the signature is checked, not after. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 415 */
-            415: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_INVALID_REQUEST";
-                        /** @constant */
-                        status: 415;
-                        /** @default Unsupported media type. A request body must be `application/json` (optionally `; charset=utf-8`), and must not carry a `Content-Encoding` other than `identity` — a proof binds the raw request octets, and this API does not reverse an encoding before checking that binding. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 429 */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_RATE_LIMITED";
-                        /** @constant */
-                        status: 429;
-                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
-                        message: string;
-                        data: {
-                            /** @description Which per-IP budget was exhausted */
-                            scope: string;
-                            /** @description Milliseconds to wait before retrying */
-                            retryAfterMs: number;
-                        };
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 503 */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_SERVICE_UNAVAILABLE";
-                        /** @constant */
-                        status: 503;
-                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["ProofRequired"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Replayed"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["ServiceUnavailable"];
+            default: components["responses"]["Error"];
         };
     };
     "comments.listPostComments": {
@@ -4243,89 +4351,10 @@ export interface operations {
                     "application/json": components["schemas"]["PublicCommentPageOutput"];
                 };
             };
-            /** @description 404 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_NOT_FOUND";
-                        /** @constant */
-                        status: 404;
-                        /** @default Not found. A missing space and a non-public (private) one return a byte-identical 404 by design — the two are deliberately indistinguishable (no existence leak). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 429 */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_RATE_LIMITED";
-                        /** @constant */
-                        status: 429;
-                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
-                        message: string;
-                        data: {
-                            /** @description Which per-IP budget was exhausted */
-                            scope: string;
-                            /** @description Milliseconds to wait before retrying */
-                            retryAfterMs: number;
-                        };
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 503 */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_SERVICE_UNAVAILABLE";
-                        /** @constant */
-                        status: 503;
-                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["ServiceUnavailable"];
+            default: components["responses"]["Error"];
         };
     };
     "comments.createComment": {
@@ -4345,14 +4374,14 @@ export interface operations {
                     body: string;
                     /**
                      * @description Reply to this comment rather than to the post. Must be a comment on the same root post.
-                     * @example post_6encc4akrze2ah9kntzd9t
+                     * @example comment_9rze4tk2vdc7fa38nhe6c2
                      */
                     parentCommentId?: string;
                 };
             };
         };
         responses: {
-            /** @description OK */
+            /** @description Created */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -4361,245 +4390,16 @@ export interface operations {
                     "application/json": components["schemas"]["PublicCommentWriteOutput"];
                 };
             };
-            /** @description 400 */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_INVALID_REQUEST";
-                        /** @constant */
-                        status: 400;
-                        /** @default The request could not be acted on as sent: an edit that names nothing to change, a body that fails validation, or a field this API does not serve (request bodies are closed, so an unknown member is refused rather than ignored). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 401 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_AUTHENTICATION_FAILED";
-                        /** @constant */
-                        status: 401;
-                        /** @default The DFOS request proof was missing, malformed, stale, or did not verify. Sign a fresh proof over this exact method, host, path, and body. Branch on this status and body: responses normally also carry a `WWW-Authenticate: DFOS` challenge header, but that header is best-effort and may arrive remapped, so it must not be the thing a client keys on. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 403 */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_UNAUTHORIZED";
-                        /** @constant */
-                        status: 403;
-                        /** @default The request proof verified but the credential does not authorize this request — it is expired, revoked, not issued by this platform, or its attenuation does not cover this action on this host. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 404 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_NOT_FOUND";
-                        /** @constant */
-                        status: 404;
-                        /** @default Not found. A missing space and a non-public (private) one return a byte-identical 404 by design — the two are deliberately indistinguishable (no existence leak). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 409 */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_CONFLICT";
-                        /** @constant */
-                        status: 409;
-                        /** @default This request was already seen — its `jti` was spent inside the proof freshness window. The earlier attempt may have succeeded, so re-read state instead of retrying. A genuine retry must carry a NEW `jti`. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 413 */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_INVALID_REQUEST";
-                        /** @constant */
-                        status: 413;
-                        /** @default The request body exceeds the maximum this endpoint will authenticate. A proof binds the body it was signed over, so an unhashable body cannot be authenticated at any size — the cap is refused before the signature is checked, not after. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 415 */
-            415: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_INVALID_REQUEST";
-                        /** @constant */
-                        status: 415;
-                        /** @default Unsupported media type. A request body must be `application/json` (optionally `; charset=utf-8`), and must not carry a `Content-Encoding` other than `identity` — a proof binds the raw request octets, and this API does not reverse an encoding before checking that binding. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 429 */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_RATE_LIMITED";
-                        /** @constant */
-                        status: 429;
-                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
-                        message: string;
-                        data: {
-                            /** @description Which per-IP budget was exhausted */
-                            scope: string;
-                            /** @description Milliseconds to wait before retrying */
-                            retryAfterMs: number;
-                        };
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 503 */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_SERVICE_UNAVAILABLE";
-                        /** @constant */
-                        status: 503;
-                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["ProofRequired"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Replayed"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["ServiceUnavailable"];
+            default: components["responses"]["Error"];
         };
     };
     "comments.deleteComment": {
@@ -4623,245 +4423,16 @@ export interface operations {
                     "application/json": components["schemas"]["PublicDeletedOutput"];
                 };
             };
-            /** @description 400 */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_INVALID_REQUEST";
-                        /** @constant */
-                        status: 400;
-                        /** @default The request could not be acted on as sent: an edit that names nothing to change, a body that fails validation, or a field this API does not serve (request bodies are closed, so an unknown member is refused rather than ignored). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 401 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_AUTHENTICATION_FAILED";
-                        /** @constant */
-                        status: 401;
-                        /** @default The DFOS request proof was missing, malformed, stale, or did not verify. Sign a fresh proof over this exact method, host, path, and body. Branch on this status and body: responses normally also carry a `WWW-Authenticate: DFOS` challenge header, but that header is best-effort and may arrive remapped, so it must not be the thing a client keys on. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 403 */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_UNAUTHORIZED";
-                        /** @constant */
-                        status: 403;
-                        /** @default The request proof verified but the credential does not authorize this request — it is expired, revoked, not issued by this platform, or its attenuation does not cover this action on this host. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 404 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_NOT_FOUND";
-                        /** @constant */
-                        status: 404;
-                        /** @default Not found. A missing space and a non-public (private) one return a byte-identical 404 by design — the two are deliberately indistinguishable (no existence leak). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 409 */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_CONFLICT";
-                        /** @constant */
-                        status: 409;
-                        /** @default This request was already seen — its `jti` was spent inside the proof freshness window. The earlier attempt may have succeeded, so re-read state instead of retrying. A genuine retry must carry a NEW `jti`. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 413 */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_INVALID_REQUEST";
-                        /** @constant */
-                        status: 413;
-                        /** @default The request body exceeds the maximum this endpoint will authenticate. A proof binds the body it was signed over, so an unhashable body cannot be authenticated at any size — the cap is refused before the signature is checked, not after. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 415 */
-            415: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_INVALID_REQUEST";
-                        /** @constant */
-                        status: 415;
-                        /** @default Unsupported media type. A request body must be `application/json` (optionally `; charset=utf-8`), and must not carry a `Content-Encoding` other than `identity` — a proof binds the raw request octets, and this API does not reverse an encoding before checking that binding. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 429 */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_RATE_LIMITED";
-                        /** @constant */
-                        status: 429;
-                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
-                        message: string;
-                        data: {
-                            /** @description Which per-IP budget was exhausted */
-                            scope: string;
-                            /** @description Milliseconds to wait before retrying */
-                            retryAfterMs: number;
-                        };
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 503 */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_SERVICE_UNAVAILABLE";
-                        /** @constant */
-                        status: 503;
-                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["ProofRequired"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Replayed"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["ServiceUnavailable"];
+            default: components["responses"]["Error"];
         };
     };
     "comments.editComment": {
@@ -4892,245 +4463,16 @@ export interface operations {
                     "application/json": components["schemas"]["PublicCommentWriteOutput"];
                 };
             };
-            /** @description 400 */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_INVALID_REQUEST";
-                        /** @constant */
-                        status: 400;
-                        /** @default The request could not be acted on as sent: an edit that names nothing to change, a body that fails validation, or a field this API does not serve (request bodies are closed, so an unknown member is refused rather than ignored). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 401 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_AUTHENTICATION_FAILED";
-                        /** @constant */
-                        status: 401;
-                        /** @default The DFOS request proof was missing, malformed, stale, or did not verify. Sign a fresh proof over this exact method, host, path, and body. Branch on this status and body: responses normally also carry a `WWW-Authenticate: DFOS` challenge header, but that header is best-effort and may arrive remapped, so it must not be the thing a client keys on. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 403 */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_UNAUTHORIZED";
-                        /** @constant */
-                        status: 403;
-                        /** @default The request proof verified but the credential does not authorize this request — it is expired, revoked, not issued by this platform, or its attenuation does not cover this action on this host. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 404 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_NOT_FOUND";
-                        /** @constant */
-                        status: 404;
-                        /** @default Not found. A missing space and a non-public (private) one return a byte-identical 404 by design — the two are deliberately indistinguishable (no existence leak). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 409 */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_CONFLICT";
-                        /** @constant */
-                        status: 409;
-                        /** @default This request was already seen — its `jti` was spent inside the proof freshness window. The earlier attempt may have succeeded, so re-read state instead of retrying. A genuine retry must carry a NEW `jti`. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 413 */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_INVALID_REQUEST";
-                        /** @constant */
-                        status: 413;
-                        /** @default The request body exceeds the maximum this endpoint will authenticate. A proof binds the body it was signed over, so an unhashable body cannot be authenticated at any size — the cap is refused before the signature is checked, not after. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 415 */
-            415: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_INVALID_REQUEST";
-                        /** @constant */
-                        status: 415;
-                        /** @default Unsupported media type. A request body must be `application/json` (optionally `; charset=utf-8`), and must not carry a `Content-Encoding` other than `identity` — a proof binds the raw request octets, and this API does not reverse an encoding before checking that binding. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 429 */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_RATE_LIMITED";
-                        /** @constant */
-                        status: 429;
-                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
-                        message: string;
-                        data: {
-                            /** @description Which per-IP budget was exhausted */
-                            scope: string;
-                            /** @description Milliseconds to wait before retrying */
-                            retryAfterMs: number;
-                        };
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 503 */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_SERVICE_UNAVAILABLE";
-                        /** @constant */
-                        status: 503;
-                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["ProofRequired"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Replayed"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["ServiceUnavailable"];
+            default: components["responses"]["Error"];
         };
     };
     "comments.upvoteComment": {
@@ -5154,245 +4496,16 @@ export interface operations {
                     "application/json": components["schemas"]["PublicUpvoteStateOutput"];
                 };
             };
-            /** @description 400 */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_INVALID_REQUEST";
-                        /** @constant */
-                        status: 400;
-                        /** @default The request could not be acted on as sent: an edit that names nothing to change, a body that fails validation, or a field this API does not serve (request bodies are closed, so an unknown member is refused rather than ignored). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 401 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_AUTHENTICATION_FAILED";
-                        /** @constant */
-                        status: 401;
-                        /** @default The DFOS request proof was missing, malformed, stale, or did not verify. Sign a fresh proof over this exact method, host, path, and body. Branch on this status and body: responses normally also carry a `WWW-Authenticate: DFOS` challenge header, but that header is best-effort and may arrive remapped, so it must not be the thing a client keys on. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 403 */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_UNAUTHORIZED";
-                        /** @constant */
-                        status: 403;
-                        /** @default The request proof verified but the credential does not authorize this request — it is expired, revoked, not issued by this platform, or its attenuation does not cover this action on this host. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 404 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_NOT_FOUND";
-                        /** @constant */
-                        status: 404;
-                        /** @default Not found. A missing space and a non-public (private) one return a byte-identical 404 by design — the two are deliberately indistinguishable (no existence leak). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 409 */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_CONFLICT";
-                        /** @constant */
-                        status: 409;
-                        /** @default This request was already seen — its `jti` was spent inside the proof freshness window. The earlier attempt may have succeeded, so re-read state instead of retrying. A genuine retry must carry a NEW `jti`. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 413 */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_INVALID_REQUEST";
-                        /** @constant */
-                        status: 413;
-                        /** @default The request body exceeds the maximum this endpoint will authenticate. A proof binds the body it was signed over, so an unhashable body cannot be authenticated at any size — the cap is refused before the signature is checked, not after. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 415 */
-            415: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_INVALID_REQUEST";
-                        /** @constant */
-                        status: 415;
-                        /** @default Unsupported media type. A request body must be `application/json` (optionally `; charset=utf-8`), and must not carry a `Content-Encoding` other than `identity` — a proof binds the raw request octets, and this API does not reverse an encoding before checking that binding. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 429 */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_RATE_LIMITED";
-                        /** @constant */
-                        status: 429;
-                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
-                        message: string;
-                        data: {
-                            /** @description Which per-IP budget was exhausted */
-                            scope: string;
-                            /** @description Milliseconds to wait before retrying */
-                            retryAfterMs: number;
-                        };
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 503 */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_SERVICE_UNAVAILABLE";
-                        /** @constant */
-                        status: 503;
-                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["ProofRequired"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Replayed"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["ServiceUnavailable"];
+            default: components["responses"]["Error"];
         };
     };
     "comments.removeCommentUpvote": {
@@ -5416,245 +4529,16 @@ export interface operations {
                     "application/json": components["schemas"]["PublicUpvoteStateOutput"];
                 };
             };
-            /** @description 400 */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_INVALID_REQUEST";
-                        /** @constant */
-                        status: 400;
-                        /** @default The request could not be acted on as sent: an edit that names nothing to change, a body that fails validation, or a field this API does not serve (request bodies are closed, so an unknown member is refused rather than ignored). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 401 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_AUTHENTICATION_FAILED";
-                        /** @constant */
-                        status: 401;
-                        /** @default The DFOS request proof was missing, malformed, stale, or did not verify. Sign a fresh proof over this exact method, host, path, and body. Branch on this status and body: responses normally also carry a `WWW-Authenticate: DFOS` challenge header, but that header is best-effort and may arrive remapped, so it must not be the thing a client keys on. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 403 */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_UNAUTHORIZED";
-                        /** @constant */
-                        status: 403;
-                        /** @default The request proof verified but the credential does not authorize this request — it is expired, revoked, not issued by this platform, or its attenuation does not cover this action on this host. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 404 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_NOT_FOUND";
-                        /** @constant */
-                        status: 404;
-                        /** @default Not found. A missing space and a non-public (private) one return a byte-identical 404 by design — the two are deliberately indistinguishable (no existence leak). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 409 */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_CONFLICT";
-                        /** @constant */
-                        status: 409;
-                        /** @default This request was already seen — its `jti` was spent inside the proof freshness window. The earlier attempt may have succeeded, so re-read state instead of retrying. A genuine retry must carry a NEW `jti`. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 413 */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_INVALID_REQUEST";
-                        /** @constant */
-                        status: 413;
-                        /** @default The request body exceeds the maximum this endpoint will authenticate. A proof binds the body it was signed over, so an unhashable body cannot be authenticated at any size — the cap is refused before the signature is checked, not after. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 415 */
-            415: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_INVALID_REQUEST";
-                        /** @constant */
-                        status: 415;
-                        /** @default Unsupported media type. A request body must be `application/json` (optionally `; charset=utf-8`), and must not carry a `Content-Encoding` other than `identity` — a proof binds the raw request octets, and this API does not reverse an encoding before checking that binding. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 429 */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_RATE_LIMITED";
-                        /** @constant */
-                        status: 429;
-                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
-                        message: string;
-                        data: {
-                            /** @description Which per-IP budget was exhausted */
-                            scope: string;
-                            /** @description Milliseconds to wait before retrying */
-                            retryAfterMs: number;
-                        };
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 503 */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_SERVICE_UNAVAILABLE";
-                        /** @constant */
-                        status: 503;
-                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["ProofRequired"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Replayed"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["ServiceUnavailable"];
+            default: components["responses"]["Error"];
         };
     };
     "feed.listFeed": {
@@ -5679,63 +4563,9 @@ export interface operations {
                     "application/json": components["schemas"]["FeedPageOutput"];
                 };
             };
-            /** @description 429 */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_RATE_LIMITED";
-                        /** @constant */
-                        status: 429;
-                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
-                        message: string;
-                        data: {
-                            /** @description Which per-IP budget was exhausted */
-                            scope: string;
-                            /** @description Milliseconds to wait before retrying */
-                            retryAfterMs: number;
-                        };
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 503 */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_SERVICE_UNAVAILABLE";
-                        /** @constant */
-                        status: 503;
-                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["ServiceUnavailable"];
+            default: components["responses"]["Error"];
         };
     };
     "pages.listPages": {
@@ -5762,89 +4592,10 @@ export interface operations {
                     "application/json": components["schemas"]["PublicPagePageOutput"];
                 };
             };
-            /** @description 404 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_NOT_FOUND";
-                        /** @constant */
-                        status: 404;
-                        /** @default Not found. A missing space and a non-public (private) one return a byte-identical 404 by design — the two are deliberately indistinguishable (no existence leak). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 429 */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_RATE_LIMITED";
-                        /** @constant */
-                        status: 429;
-                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
-                        message: string;
-                        data: {
-                            /** @description Which per-IP budget was exhausted */
-                            scope: string;
-                            /** @description Milliseconds to wait before retrying */
-                            retryAfterMs: number;
-                        };
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 503 */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_SERVICE_UNAVAILABLE";
-                        /** @constant */
-                        status: 503;
-                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["ServiceUnavailable"];
+            default: components["responses"]["Error"];
         };
     };
     "pages.getPage": {
@@ -5868,89 +4619,10 @@ export interface operations {
                     "application/json": components["schemas"]["PublicPageOutput"];
                 };
             };
-            /** @description 404 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_NOT_FOUND";
-                        /** @constant */
-                        status: 404;
-                        /** @default Not found. A missing space and a non-public (private) one return a byte-identical 404 by design — the two are deliberately indistinguishable (no existence leak). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 429 */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_RATE_LIMITED";
-                        /** @constant */
-                        status: 429;
-                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
-                        message: string;
-                        data: {
-                            /** @description Which per-IP budget was exhausted */
-                            scope: string;
-                            /** @description Milliseconds to wait before retrying */
-                            retryAfterMs: number;
-                        };
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 503 */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_SERVICE_UNAVAILABLE";
-                        /** @constant */
-                        status: 503;
-                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["ServiceUnavailable"];
+            default: components["responses"]["Error"];
         };
     };
     "events.listSpaceEvents": {
@@ -5979,89 +4651,10 @@ export interface operations {
                     "application/json": components["schemas"]["PublicEventPageOutput"];
                 };
             };
-            /** @description 404 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_NOT_FOUND";
-                        /** @constant */
-                        status: 404;
-                        /** @default Not found. A missing space and a non-public (private) one return a byte-identical 404 by design — the two are deliberately indistinguishable (no existence leak). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 429 */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_RATE_LIMITED";
-                        /** @constant */
-                        status: 429;
-                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
-                        message: string;
-                        data: {
-                            /** @description Which per-IP budget was exhausted */
-                            scope: string;
-                            /** @description Milliseconds to wait before retrying */
-                            retryAfterMs: number;
-                        };
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 503 */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_SERVICE_UNAVAILABLE";
-                        /** @constant */
-                        status: 503;
-                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["ServiceUnavailable"];
+            default: components["responses"]["Error"];
         };
     };
     "events.getSpaceEvent": {
@@ -6087,89 +4680,10 @@ export interface operations {
                     "application/json": components["schemas"]["PublicEventOutput"];
                 };
             };
-            /** @description 404 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_NOT_FOUND";
-                        /** @constant */
-                        status: 404;
-                        /** @default Not found. A missing space and a non-public (private) one return a byte-identical 404 by design — the two are deliberately indistinguishable (no existence leak). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 429 */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_RATE_LIMITED";
-                        /** @constant */
-                        status: 429;
-                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
-                        message: string;
-                        data: {
-                            /** @description Which per-IP budget was exhausted */
-                            scope: string;
-                            /** @description Milliseconds to wait before retrying */
-                            retryAfterMs: number;
-                        };
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 503 */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_SERVICE_UNAVAILABLE";
-                        /** @constant */
-                        status: 503;
-                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["ServiceUnavailable"];
+            default: components["responses"]["Error"];
         };
     };
     "events.listUpcomingEvents": {
@@ -6196,63 +4710,9 @@ export interface operations {
                     "application/json": components["schemas"]["PublicEventPageOutput"];
                 };
             };
-            /** @description 429 */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_RATE_LIMITED";
-                        /** @constant */
-                        status: 429;
-                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
-                        message: string;
-                        data: {
-                            /** @description Which per-IP budget was exhausted */
-                            scope: string;
-                            /** @description Milliseconds to wait before retrying */
-                            retryAfterMs: number;
-                        };
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 503 */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_SERVICE_UNAVAILABLE";
-                        /** @constant */
-                        status: 503;
-                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["ServiceUnavailable"];
+            default: components["responses"]["Error"];
         };
     };
     "products.listProducts": {
@@ -6279,89 +4739,10 @@ export interface operations {
                     "application/json": components["schemas"]["PublicProductPageOutput"];
                 };
             };
-            /** @description 404 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_NOT_FOUND";
-                        /** @constant */
-                        status: 404;
-                        /** @default Not found. A missing space and a non-public (private) one return a byte-identical 404 by design — the two are deliberately indistinguishable (no existence leak). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 429 */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_RATE_LIMITED";
-                        /** @constant */
-                        status: 429;
-                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
-                        message: string;
-                        data: {
-                            /** @description Which per-IP budget was exhausted */
-                            scope: string;
-                            /** @description Milliseconds to wait before retrying */
-                            retryAfterMs: number;
-                        };
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 503 */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_SERVICE_UNAVAILABLE";
-                        /** @constant */
-                        status: 503;
-                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["ServiceUnavailable"];
+            default: components["responses"]["Error"];
         };
     };
     "products.listAllProducts": {
@@ -6386,63 +4767,9 @@ export interface operations {
                     "application/json": components["schemas"]["PublicProductFeedPageOutput"];
                 };
             };
-            /** @description 429 */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_RATE_LIMITED";
-                        /** @constant */
-                        status: 429;
-                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
-                        message: string;
-                        data: {
-                            /** @description Which per-IP budget was exhausted */
-                            scope: string;
-                            /** @description Milliseconds to wait before retrying */
-                            retryAfterMs: number;
-                        };
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 503 */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_SERVICE_UNAVAILABLE";
-                        /** @constant */
-                        status: 503;
-                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["ServiceUnavailable"];
+            default: components["responses"]["Error"];
         };
     };
     "products.getProduct": {
@@ -6466,89 +4793,10 @@ export interface operations {
                     "application/json": components["schemas"]["PublicProductOutput"];
                 };
             };
-            /** @description 404 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_NOT_FOUND";
-                        /** @constant */
-                        status: 404;
-                        /** @default Not found. A missing space and a non-public (private) one return a byte-identical 404 by design — the two are deliberately indistinguishable (no existence leak). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 429 */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_RATE_LIMITED";
-                        /** @constant */
-                        status: 429;
-                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
-                        message: string;
-                        data: {
-                            /** @description Which per-IP budget was exhausted */
-                            scope: string;
-                            /** @description Milliseconds to wait before retrying */
-                            retryAfterMs: number;
-                        };
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 503 */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_SERVICE_UNAVAILABLE";
-                        /** @constant */
-                        status: 503;
-                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["ServiceUnavailable"];
+            default: components["responses"]["Error"];
         };
     };
     "releases.listSpaceReleases": {
@@ -6575,89 +4823,10 @@ export interface operations {
                     "application/json": components["schemas"]["PublicReleasePageOutput"];
                 };
             };
-            /** @description 404 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_NOT_FOUND";
-                        /** @constant */
-                        status: 404;
-                        /** @default Not found. A missing space and a non-public (private) one return a byte-identical 404 by design — the two are deliberately indistinguishable (no existence leak). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 429 */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_RATE_LIMITED";
-                        /** @constant */
-                        status: 429;
-                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
-                        message: string;
-                        data: {
-                            /** @description Which per-IP budget was exhausted */
-                            scope: string;
-                            /** @description Milliseconds to wait before retrying */
-                            retryAfterMs: number;
-                        };
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 503 */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_SERVICE_UNAVAILABLE";
-                        /** @constant */
-                        status: 503;
-                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["ServiceUnavailable"];
+            default: components["responses"]["Error"];
         };
     };
     "releases.listReleases": {
@@ -6682,63 +4851,9 @@ export interface operations {
                     "application/json": components["schemas"]["PublicReleaseFeedPageOutput"];
                 };
             };
-            /** @description 429 */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_RATE_LIMITED";
-                        /** @constant */
-                        status: 429;
-                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
-                        message: string;
-                        data: {
-                            /** @description Which per-IP budget was exhausted */
-                            scope: string;
-                            /** @description Milliseconds to wait before retrying */
-                            retryAfterMs: number;
-                        };
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 503 */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_SERVICE_UNAVAILABLE";
-                        /** @constant */
-                        status: 503;
-                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["ServiceUnavailable"];
+            default: components["responses"]["Error"];
         };
     };
     "releases.getSpaceRelease": {
@@ -6762,89 +4877,10 @@ export interface operations {
                     "application/json": components["schemas"]["PublicReleaseOutput"];
                 };
             };
-            /** @description 404 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_NOT_FOUND";
-                        /** @constant */
-                        status: 404;
-                        /** @default Not found. A missing space and a non-public (private) one return a byte-identical 404 by design — the two are deliberately indistinguishable (no existence leak). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 429 */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_RATE_LIMITED";
-                        /** @constant */
-                        status: 429;
-                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
-                        message: string;
-                        data: {
-                            /** @description Which per-IP budget was exhausted */
-                            scope: string;
-                            /** @description Milliseconds to wait before retrying */
-                            retryAfterMs: number;
-                        };
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 503 */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_SERVICE_UNAVAILABLE";
-                        /** @constant */
-                        status: 503;
-                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["ServiceUnavailable"];
+            default: components["responses"]["Error"];
         };
     };
     "topics.listTopics": {
@@ -6871,89 +4907,10 @@ export interface operations {
                     "application/json": components["schemas"]["PublicTopicPageOutput"];
                 };
             };
-            /** @description 404 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_NOT_FOUND";
-                        /** @constant */
-                        status: 404;
-                        /** @default Not found. A missing space and a non-public (private) one return a byte-identical 404 by design — the two are deliberately indistinguishable (no existence leak). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 429 */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_RATE_LIMITED";
-                        /** @constant */
-                        status: 429;
-                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
-                        message: string;
-                        data: {
-                            /** @description Which per-IP budget was exhausted */
-                            scope: string;
-                            /** @description Milliseconds to wait before retrying */
-                            retryAfterMs: number;
-                        };
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 503 */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_SERVICE_UNAVAILABLE";
-                        /** @constant */
-                        status: 503;
-                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["ServiceUnavailable"];
+            default: components["responses"]["Error"];
         };
     };
     "topics.getTopic": {
@@ -6977,89 +4934,10 @@ export interface operations {
                     "application/json": components["schemas"]["PublicTopicOutput"];
                 };
             };
-            /** @description 404 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_NOT_FOUND";
-                        /** @constant */
-                        status: 404;
-                        /** @default Not found. A missing space and a non-public (private) one return a byte-identical 404 by design — the two are deliberately indistinguishable (no existence leak). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 429 */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_RATE_LIMITED";
-                        /** @constant */
-                        status: 429;
-                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
-                        message: string;
-                        data: {
-                            /** @description Which per-IP budget was exhausted */
-                            scope: string;
-                            /** @description Milliseconds to wait before retrying */
-                            retryAfterMs: number;
-                        };
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 503 */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_SERVICE_UNAVAILABLE";
-                        /** @constant */
-                        status: 503;
-                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["ServiceUnavailable"];
+            default: components["responses"]["Error"];
         };
     };
     "users.getUser": {
@@ -7082,89 +4960,10 @@ export interface operations {
                     "application/json": components["schemas"]["PublicUserOutput"];
                 };
             };
-            /** @description 404 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_NOT_FOUND";
-                        /** @constant */
-                        status: 404;
-                        /** @default Not found. A missing space and a non-public (private) one return a byte-identical 404 by design — the two are deliberately indistinguishable (no existence leak). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 429 */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_RATE_LIMITED";
-                        /** @constant */
-                        status: 429;
-                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
-                        message: string;
-                        data: {
-                            /** @description Which per-IP budget was exhausted */
-                            scope: string;
-                            /** @description Milliseconds to wait before retrying */
-                            retryAfterMs: number;
-                        };
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 503 */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_SERVICE_UNAVAILABLE";
-                        /** @constant */
-                        status: 503;
-                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["ServiceUnavailable"];
+            default: components["responses"]["Error"];
         };
     };
     "users.listUsers": {
@@ -7189,63 +4988,9 @@ export interface operations {
                     "application/json": components["schemas"]["PublicUserPageOutput"];
                 };
             };
-            /** @description 429 */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_RATE_LIMITED";
-                        /** @constant */
-                        status: 429;
-                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
-                        message: string;
-                        data: {
-                            /** @description Which per-IP budget was exhausted */
-                            scope: string;
-                            /** @description Milliseconds to wait before retrying */
-                            retryAfterMs: number;
-                        };
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 503 */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_SERVICE_UNAVAILABLE";
-                        /** @constant */
-                        status: 503;
-                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["ServiceUnavailable"];
+            default: components["responses"]["Error"];
         };
     };
     "users.getUserSpaces": {
@@ -7272,89 +5017,10 @@ export interface operations {
                     "application/json": components["schemas"]["PublicUserSpacePageOutput"];
                 };
             };
-            /** @description 404 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_NOT_FOUND";
-                        /** @constant */
-                        status: 404;
-                        /** @default Not found. A missing space and a non-public (private) one return a byte-identical 404 by design — the two are deliberately indistinguishable (no existence leak). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 429 */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_RATE_LIMITED";
-                        /** @constant */
-                        status: 429;
-                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
-                        message: string;
-                        data: {
-                            /** @description Which per-IP budget was exhausted */
-                            scope: string;
-                            /** @description Milliseconds to wait before retrying */
-                            retryAfterMs: number;
-                        };
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 503 */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_SERVICE_UNAVAILABLE";
-                        /** @constant */
-                        status: 503;
-                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["ServiceUnavailable"];
+            default: components["responses"]["Error"];
         };
     };
     "profile.getOwnProfile": {
@@ -7374,159 +5040,30 @@ export interface operations {
                 content: {
                     "application/json": {
                         did: components["schemas"]["ProtocolDid"];
-                        /** @description The user's handle, or null if unset. A MUTABLE alias — the `did` is the canonical, stable identifier to store. ABSENT (not null) under a credential that does not carry `read:profile`; always present under an identity proof. */
+                        /** @description The user's handle, or null if unset. A mutable alias; the `did` is canonical. Absent without `read:profile`. */
                         username?: string | null;
-                        /** @description Display name, or null. ABSENT (not null) under a credential that does not carry `read:profile`; always present under an identity proof. */
+                        /** @description Display name, or null. Absent without `read:profile`. */
                         displayName?: string | null;
-                        /** @description Profile bio / description, or null. ABSENT (not null) under a credential that does not carry `read:profile`; always present under an identity proof. */
+                        /** @description Profile bio, or null. Absent without `read:profile`. */
                         description?: string | null;
-                        /** @description Permanent public CDN URL for the profile avatar, or null when they have none. NOT a signed URL — an avatar is public media, so this link is stable while the media is referenced. ABSENT (not null) under a credential that does not carry `read:profile`; always present under an identity proof. */
+                        /** @description Permanent public CDN URL for the profile avatar, or null. Not a signed URL. Absent without `read:profile`. */
                         avatarUrl?: string | null;
-                        /** @description The account email of the authenticated subject. PRIVATE — it is served only under a verified proof: to the subject themselves under an identity proof, and to a third party only when the credential the subject issued carries `read:email`. ABSENT (not null) otherwise. Revoking a credential ends that app’s access immediately; it does not un-share what was already read. */
+                        /** @description The subject's account email, served only under a verified proof. Absent without `read:email`. */
                         email?: string;
                         /**
                          * Format: date-time
-                         * @description When the user joined DFOS (ISO 8601 UTC). ABSENT under a credential that does not carry `read:profile`; always present under an identity proof.
+                         * @description When the user joined DFOS (ISO 8601 UTC). Absent without `read:profile`.
                          */
                         createdAt?: string;
                     };
                 };
             };
-            /** @description 401 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_AUTHENTICATION_FAILED";
-                        /** @constant */
-                        status: 401;
-                        /** @default The DFOS request proof was missing, malformed, stale, or did not verify. Sign a fresh proof over this exact method, host, path, and body. Branch on this status and body: responses normally also carry a `WWW-Authenticate: DFOS` challenge header, but that header is best-effort and may arrive remapped, so it must not be the thing a client keys on. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 403 */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_UNAUTHORIZED";
-                        /** @constant */
-                        status: 403;
-                        /** @default The request proof verified but the credential does not authorize this request — it is expired, revoked, not issued by this platform, or its attenuation does not cover this action on this host. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 413 */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_INVALID_REQUEST";
-                        /** @constant */
-                        status: 413;
-                        /** @default The request body exceeds the maximum this endpoint will authenticate. A proof binds the body it was signed over, so an unhashable body cannot be authenticated at any size — the cap is refused before the signature is checked, not after. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 429 */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_RATE_LIMITED";
-                        /** @constant */
-                        status: 429;
-                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
-                        message: string;
-                        data: {
-                            /** @description Which per-IP budget was exhausted */
-                            scope: string;
-                            /** @description Milliseconds to wait before retrying */
-                            retryAfterMs: number;
-                        };
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 503 */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_SERVICE_UNAVAILABLE";
-                        /** @constant */
-                        status: 503;
-                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
+            401: components["responses"]["ProofRequired"];
+            403: components["responses"]["Forbidden"];
+            413: components["responses"]["PayloadTooLarge"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["ServiceUnavailable"];
+            default: components["responses"]["Error"];
         };
     };
     "memberships.listMemberships": {
@@ -7552,141 +5089,12 @@ export interface operations {
                     "application/json": components["schemas"]["MembershipPageOutput"];
                 };
             };
-            /** @description 401 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_AUTHENTICATION_FAILED";
-                        /** @constant */
-                        status: 401;
-                        /** @default The DFOS request proof was missing, malformed, stale, or did not verify. Sign a fresh proof over this exact method, host, path, and body. Branch on this status and body: responses normally also carry a `WWW-Authenticate: DFOS` challenge header, but that header is best-effort and may arrive remapped, so it must not be the thing a client keys on. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 403 */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_UNAUTHORIZED";
-                        /** @constant */
-                        status: 403;
-                        /** @default The request proof verified but the credential does not authorize this request — it is expired, revoked, not issued by this platform, or its attenuation does not cover this action on this host. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 413 */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_INVALID_REQUEST";
-                        /** @constant */
-                        status: 413;
-                        /** @default The request body exceeds the maximum this endpoint will authenticate. A proof binds the body it was signed over, so an unhashable body cannot be authenticated at any size — the cap is refused before the signature is checked, not after. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 429 */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_RATE_LIMITED";
-                        /** @constant */
-                        status: 429;
-                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
-                        message: string;
-                        data: {
-                            /** @description Which per-IP budget was exhausted */
-                            scope: string;
-                            /** @description Milliseconds to wait before retrying */
-                            retryAfterMs: number;
-                        };
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 503 */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_SERVICE_UNAVAILABLE";
-                        /** @constant */
-                        status: 503;
-                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
+            401: components["responses"]["ProofRequired"];
+            403: components["responses"]["Forbidden"];
+            413: components["responses"]["PayloadTooLarge"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["ServiceUnavailable"];
+            default: components["responses"]["Error"];
         };
     };
     "memberships.getMembership": {
@@ -7709,167 +5117,13 @@ export interface operations {
                     "application/json": components["schemas"]["MembershipOutput"];
                 };
             };
-            /** @description 401 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_AUTHENTICATION_FAILED";
-                        /** @constant */
-                        status: 401;
-                        /** @default The DFOS request proof was missing, malformed, stale, or did not verify. Sign a fresh proof over this exact method, host, path, and body. Branch on this status and body: responses normally also carry a `WWW-Authenticate: DFOS` challenge header, but that header is best-effort and may arrive remapped, so it must not be the thing a client keys on. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 403 */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_UNAUTHORIZED";
-                        /** @constant */
-                        status: 403;
-                        /** @default The request proof verified but the credential does not authorize this request — it is expired, revoked, not issued by this platform, or its attenuation does not cover this action on this host. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 404 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_NOT_FOUND";
-                        /** @constant */
-                        status: 404;
-                        /** @default Not found. "No such space or group" and "the granting user is not in it" are deliberately indistinguishable — this credential discloses the user's own memberships, never the existence of anything else. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 413 */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_INVALID_REQUEST";
-                        /** @constant */
-                        status: 413;
-                        /** @default The request body exceeds the maximum this endpoint will authenticate. A proof binds the body it was signed over, so an unhashable body cannot be authenticated at any size — the cap is refused before the signature is checked, not after. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 429 */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_RATE_LIMITED";
-                        /** @constant */
-                        status: 429;
-                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
-                        message: string;
-                        data: {
-                            /** @description Which per-IP budget was exhausted */
-                            scope: string;
-                            /** @description Milliseconds to wait before retrying */
-                            retryAfterMs: number;
-                        };
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 503 */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_SERVICE_UNAVAILABLE";
-                        /** @constant */
-                        status: 503;
-                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
+            401: components["responses"]["ProofRequired"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["MembershipNotFound"];
+            413: components["responses"]["PayloadTooLarge"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["ServiceUnavailable"];
+            default: components["responses"]["Error"];
         };
     };
     "memberships.listGroupMemberships": {
@@ -7896,141 +5150,12 @@ export interface operations {
                     "application/json": components["schemas"]["GroupMembershipPageOutput"];
                 };
             };
-            /** @description 401 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_AUTHENTICATION_FAILED";
-                        /** @constant */
-                        status: 401;
-                        /** @default The DFOS request proof was missing, malformed, stale, or did not verify. Sign a fresh proof over this exact method, host, path, and body. Branch on this status and body: responses normally also carry a `WWW-Authenticate: DFOS` challenge header, but that header is best-effort and may arrive remapped, so it must not be the thing a client keys on. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 403 */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_UNAUTHORIZED";
-                        /** @constant */
-                        status: 403;
-                        /** @default The request proof verified but the credential does not authorize this request — it is expired, revoked, not issued by this platform, or its attenuation does not cover this action on this host. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 413 */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_INVALID_REQUEST";
-                        /** @constant */
-                        status: 413;
-                        /** @default The request body exceeds the maximum this endpoint will authenticate. A proof binds the body it was signed over, so an unhashable body cannot be authenticated at any size — the cap is refused before the signature is checked, not after. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 429 */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_RATE_LIMITED";
-                        /** @constant */
-                        status: 429;
-                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
-                        message: string;
-                        data: {
-                            /** @description Which per-IP budget was exhausted */
-                            scope: string;
-                            /** @description Milliseconds to wait before retrying */
-                            retryAfterMs: number;
-                        };
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 503 */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_SERVICE_UNAVAILABLE";
-                        /** @constant */
-                        status: 503;
-                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
+            401: components["responses"]["ProofRequired"];
+            403: components["responses"]["Forbidden"];
+            413: components["responses"]["PayloadTooLarge"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["ServiceUnavailable"];
+            default: components["responses"]["Error"];
         };
     };
     "memberships.getGroupMembership": {
@@ -8053,167 +5178,13 @@ export interface operations {
                     "application/json": components["schemas"]["GroupMembershipOutput"];
                 };
             };
-            /** @description 401 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_AUTHENTICATION_FAILED";
-                        /** @constant */
-                        status: 401;
-                        /** @default The DFOS request proof was missing, malformed, stale, or did not verify. Sign a fresh proof over this exact method, host, path, and body. Branch on this status and body: responses normally also carry a `WWW-Authenticate: DFOS` challenge header, but that header is best-effort and may arrive remapped, so it must not be the thing a client keys on. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 403 */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_UNAUTHORIZED";
-                        /** @constant */
-                        status: 403;
-                        /** @default The request proof verified but the credential does not authorize this request — it is expired, revoked, not issued by this platform, or its attenuation does not cover this action on this host. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 404 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_NOT_FOUND";
-                        /** @constant */
-                        status: 404;
-                        /** @default Not found. "No such space or group" and "the granting user is not in it" are deliberately indistinguishable — this credential discloses the user's own memberships, never the existence of anything else. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 413 */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_INVALID_REQUEST";
-                        /** @constant */
-                        status: 413;
-                        /** @default The request body exceeds the maximum this endpoint will authenticate. A proof binds the body it was signed over, so an unhashable body cannot be authenticated at any size — the cap is refused before the signature is checked, not after. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 429 */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_RATE_LIMITED";
-                        /** @constant */
-                        status: 429;
-                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
-                        message: string;
-                        data: {
-                            /** @description Which per-IP budget was exhausted */
-                            scope: string;
-                            /** @description Milliseconds to wait before retrying */
-                            retryAfterMs: number;
-                        };
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 503 */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_SERVICE_UNAVAILABLE";
-                        /** @constant */
-                        status: 503;
-                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
+            401: components["responses"]["ProofRequired"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["MembershipNotFound"];
+            413: components["responses"]["PayloadTooLarge"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["ServiceUnavailable"];
+            default: components["responses"]["Error"];
         };
     };
     "credential.getCredential": {
@@ -8234,141 +5205,12 @@ export interface operations {
                     "application/json": components["schemas"]["CredentialIntrospectionOutput"];
                 };
             };
-            /** @description 401 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_AUTHENTICATION_FAILED";
-                        /** @constant */
-                        status: 401;
-                        /** @default The DFOS request proof was missing, malformed, stale, or did not verify. Sign a fresh proof over this exact method, host, path, and body. Branch on this status and body: responses normally also carry a `WWW-Authenticate: DFOS` challenge header, but that header is best-effort and may arrive remapped, so it must not be the thing a client keys on. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 403 */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_UNAUTHORIZED";
-                        /** @constant */
-                        status: 403;
-                        /** @default The request proof verified but the credential does not authorize this request — it is expired, revoked, not issued by this platform, or its attenuation does not cover this action on this host. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 413 */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_INVALID_REQUEST";
-                        /** @constant */
-                        status: 413;
-                        /** @default The request body exceeds the maximum this endpoint will authenticate. A proof binds the body it was signed over, so an unhashable body cannot be authenticated at any size — the cap is refused before the signature is checked, not after. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 429 */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_RATE_LIMITED";
-                        /** @constant */
-                        status: 429;
-                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
-                        message: string;
-                        data: {
-                            /** @description Which per-IP budget was exhausted */
-                            scope: string;
-                            /** @description Milliseconds to wait before retrying */
-                            retryAfterMs: number;
-                        };
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 503 */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_SERVICE_UNAVAILABLE";
-                        /** @constant */
-                        status: 503;
-                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
+            401: components["responses"]["ProofRequired"];
+            403: components["responses"]["Forbidden"];
+            413: components["responses"]["PayloadTooLarge"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["ServiceUnavailable"];
+            default: components["responses"]["Error"];
         };
     };
     "keyProof.present": {
@@ -8382,17 +5224,17 @@ export interface operations {
             content: {
                 "application/json": {
                     /**
-                     * @description The 8-character ceremony code the user carried out of the DFOS app — the same code the well-known lookup was resolved against
-                     * @example K7M2QXPA
+                     * @description The 8-character ceremony code from the DFOS app, as resolved at the well-known lookup.
+                     * @example K7RD4HEA
                      */
                     code: string;
                     /**
-                     * @description The compact JWS proving possession, `typ` `did:dfos:key-add`. The header carries `alg` (`EdDSA`) and `typ` and nothing else — a `kid` is refused, because the verifying key comes from the payload. The payload carries exactly `nonce`, `audience`, `did`, `roleSet`, `prevCID`, `publicKeyMultibase` and `timestamp`, in that order: it is byte-compared against its canonical serialization, so the member order is part of the contract. At most 4096 bytes
+                     * @description The compact JWS proving possession, `typ` `did:dfos:key-add`. The header carries `alg` (`EdDSA`) and `typ` only; a `kid` is refused. Max 4096 bytes.
                      * @example eyJhbGciOiJFZERTQSIsInR5cCI6ImRpZDpkZm9zOmtleS1hZGQifQ...
                      */
                     envelope: string;
                     /**
-                     * @description Optional label for the key, shown to the user when they decide whether to adopt it — typically the machine it lives on. **Not part of the signed envelope**: it is unsigned platform metadata, it is not one of the payload members, and nothing about it affects whether the key is admitted. Trimmed; at most 200 characters, the same bound the settings rename enforces. Omitted, empty, or whitespace-only gets the default label `CLI signing key`. The user can rename it afterwards
+                     * @description Optional label for the key, shown to its owner at adoption. Unsigned; not part of the envelope. Trimmed, max 200 characters, default `CLI signing key`.
                      * @example work laptop
                      */
                     description?: string;
@@ -8408,120 +5250,34 @@ export interface operations {
                 content: {
                     "application/json": {
                         /**
-                         * @description The envelope verified and is stored. **Nothing is on the identity chain yet** — the owner of the identity has to adopt it in their DFOS settings, and may instead reject it. Poll `/key-proof/status` to find out which
+                         * @description The envelope verified and is stored. Nothing is on the identity chain yet; the owner adopts or rejects it in their DFOS settings.
                          * @constant
                          */
                         status: "presented";
                         /** @description The identity a key-add ceremony is for */
                         adopts: {
                             /**
-                             * @description The protocol DID of the identity chain this key would be added to
-                             * @example did:dfos:6encc4akrze2ah9kntzd9tc8zr24crc
+                             * @description The protocol DID of the identity this key would be added to
+                             * @example did:dfos:9ctvrdn9vedda7efetrhcdakfh4cr2k
                              */
                             did: string;
-                            /**
-                             * @description The identity’s username, or null if it has none
-                             * @example bvalosek
-                             */
+                            /** @description The identity’s username, or null. */
                             handle: string | null;
-                            /**
-                             * @description The identity’s display name, or null
-                             * @example Brandon
-                             */
+                            /** @description The identity’s display name, or null */
                             displayName: string | null;
                         };
                         /**
                          * Format: date-time
-                         * @description When the ceremony lapses. If nobody adopts or rejects by then it simply expires and nothing was added
-                         * @example 2026-08-28T17:10:00Z
+                         * @description When the ceremony lapses. Nothing is added if nobody adopts or rejects by then.
                          */
                         expiresAt: string;
                     };
                 };
             };
-            /** @description 400 */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_INVALID_REQUEST";
-                        /** @constant */
-                        status: 400;
-                        /** @default The request was refused. Unknown, expired, spent and wrong-nonce ceremonies all answer "this ceremony is not open" — that is a single statement, so there is nothing to learn by varying it. Only a bad SIGNATURE consumes the ceremony; every other refusal leaves the code live, so re-resolve and try again. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 429 */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_RATE_LIMITED";
-                        /** @constant */
-                        status: 429;
-                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
-                        message: string;
-                        data: {
-                            /** @description Which per-IP budget was exhausted */
-                            scope: string;
-                            /** @description Milliseconds to wait before retrying */
-                            retryAfterMs: number;
-                        };
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 503 */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_SERVICE_UNAVAILABLE";
-                        /** @constant */
-                        status: 503;
-                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
+            400: components["responses"]["KeyProofRejected"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["ServiceUnavailable"];
+            default: components["responses"]["Error"];
         };
     };
     "keyProof.status": {
@@ -8543,116 +5299,31 @@ export interface operations {
                 content: {
                     "application/json": {
                         /**
-                         * @description `pending` = nobody has presented an envelope. `presented` = yours verified and the identity’s owner is deciding. `adopted` = they adopted it and the key is on the chain (see `onAdopted`). `rejected` = they declined; **nothing was added**, and that is not an error. `failed` = an envelope was refused at the signature; the ceremony is burned. `expired` = the ten minutes ran out
+                         * @description `pending` = nothing presented; `presented` = verified, the owner is deciding; `adopted` = on the chain (see `onAdopted`); `rejected` = declined, nothing added; `failed` = bad signature, ceremony burned; `expired` = the ceremony’s ten minutes ran out.
                          * @enum {string}
                          */
                         status: "pending" | "presented" | "adopted" | "rejected" | "failed" | "expired";
-                        /** @description Present only while `presented`. True when the chain head has moved since your envelope was signed, so it can no longer be adopted as-is. **Re-resolve the code and present a fresh envelope for the same key** — that is admitted, and the owner’s approval carries across it */
+                        /** @description Present only while `presented`. True when the chain head has moved and the envelope can no longer be adopted as-is. Present a fresh envelope for the same key. */
                         stale?: boolean;
                         /** @description Present only on `adopted` */
                         onAdopted?: {
                             /**
                              * @description The identity chain the key was added to
-                             * @example did:dfos:6encc4akrze2ah9kntzd9tc8zr24crc
+                             * @example did:dfos:9ctvrdn9vedda7efetrhcdakfh4cr2k
                              */
                             did: string;
-                            /**
-                             * @description The chain-local id the key was given. The DID URL a verifier sees is `<did>#<keyId>`
-                             * @example key_4h2ndv79fckae3rz6t8v2d
-                             */
+                            /** @description The chain-local id the key was given. The DID URL a verifier sees is `<did>#<keyId>` */
                             keyId: string;
-                            /**
-                             * @description CID of the operation that added the key, with your envelope embedded in it — the receipt anyone can go read
-                             * @example bafyreib2rxk3rhqhbvpaowvtdcnqvbtwbctvvbrqjhkgvhvcnpi7zdkeqm
-                             */
+                            /** @description CID of the operation that added the key, with the envelope embedded in it. */
                             chainOpCID: string;
                         };
                     };
                 };
             };
-            /** @description 400 */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_INVALID_REQUEST";
-                        /** @constant */
-                        status: 400;
-                        /** @default The request was refused. Unknown, expired, spent and wrong-nonce ceremonies all answer "this ceremony is not open" — that is a single statement, so there is nothing to learn by varying it. Only a bad SIGNATURE consumes the ceremony; every other refusal leaves the code live, so re-resolve and try again. */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 429 */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_RATE_LIMITED";
-                        /** @constant */
-                        status: 429;
-                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
-                        message: string;
-                        data: {
-                            /** @description Which per-IP budget was exhausted */
-                            scope: string;
-                            /** @description Milliseconds to wait before retrying */
-                            retryAfterMs: number;
-                        };
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 503 */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_SERVICE_UNAVAILABLE";
-                        /** @constant */
-                        status: 503;
-                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
+            400: components["responses"]["KeyProofRejected"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["ServiceUnavailable"];
+            default: components["responses"]["Error"];
         };
     };
     "protocol.getProtocolInfo": {
@@ -8673,63 +5344,9 @@ export interface operations {
                     "application/json": components["schemas"]["PublicProtocolInfoOutput"];
                 };
             };
-            /** @description 429 */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_RATE_LIMITED";
-                        /** @constant */
-                        status: 429;
-                        /** @default Rate limit exceeded — retry after `retryAfterMs`. */
-                        message: string;
-                        data: {
-                            /** @description Which per-IP budget was exhausted */
-                            scope: string;
-                            /** @description Milliseconds to wait before retrying */
-                            retryAfterMs: number;
-                        };
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
-            /** @description 503 */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        defined: true;
-                        /** @constant */
-                        code: "E_SERVICE_UNAVAILABLE";
-                        /** @constant */
-                        status: 503;
-                        /** @default Service temporarily unavailable — the rate-limit store was unreachable (fail-closed). */
-                        message: string;
-                        data?: unknown;
-                    } | {
-                        /** @constant */
-                        defined: false;
-                        code: string;
-                        status: number;
-                        message: string;
-                        data?: unknown;
-                    };
-                };
-            };
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["ServiceUnavailable"];
+            default: components["responses"]["Error"];
         };
     };
 }
