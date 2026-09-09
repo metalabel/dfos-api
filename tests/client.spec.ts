@@ -122,7 +122,12 @@ describe('createDfosApi', () => {
 
   it('surfaces a non-2xx body as error, not data', async () => {
     const { fetch } = stubFetch(
-      { defined: true, code: 'E_RATE_LIMITED', status: 429, message: 'Rate limit exceeded' },
+      {
+        code: 'E_RATE_LIMITED',
+        status: 429,
+        message: 'Rate limit exceeded',
+        data: { scope: 'ip', retryAfterMs: 1000 },
+      },
       { status: 429 },
     );
     const api = createDfosApi({ fetch });
