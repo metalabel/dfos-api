@@ -64,7 +64,8 @@ Most of the API is anonymous `GET`s, and the default fetch is all you need. The
 rest describes or acts as one specific person and takes a proof. Which routes
 those are, which proof profiles each accepts, and which action tokens it demands
 is declared in the spec itself — the machine-readable convention is the
-"Advertising in OpenAPI" section of [API-AUTH](https://protocol.dfos.com/api-auth),
+"Advertising in OpenAPI" section of
+[API-AUTH](https://protocol.dfos.com/integrations#advertising-in-openapi),
 and the spec's own `info.description` walks the classes in prose. In outline:
 
 - **Anonymous** — the default and most of the surface. No header; one
@@ -77,21 +78,17 @@ and the spec's own `info.description` walks the classes in prose. In outline:
   [memberships](https://docs.dfos.com/docs/api/memberships), and
   [credential](https://docs.dfos.com/docs/api/credential).
 - **Optional-auth** — `GET /v1/spaces/{space}/posts` and
-  `GET /v1/spaces/{space}/posts/{postId}`. With no header they serve the
-  anonymous projection. With a proof whose grant covers the space under
-  `read:posts` they serve the projection the granting user sees: the whole feed
-  for that space, full bodies where the user genuinely reads a post, and a
-  `viewer` block. A grant only ever adds — a valid proof that does not cover the
-  space gets exactly the anonymous bytes — while a malformed, expired, or revoked
-  proof is still `401`/`403`, never a quiet downgrade.
+  `GET /v1/spaces/{space}/posts/{postId}`: anonymous with no header, and the
+  granting user's own projection with a proof whose grant covers the space under
+  `read:posts`
+  ([conventions](https://docs.dfos.com/docs/api/conventions#optional-authentication)).
 - **Writes** — every non-`GET`: posts (`write:posts`), comments
   (`write:comments`), and upvotes on either (`write:upvotes`), as the granting
-  user, on their own content only, in the spaces the grant covers. Announcing,
-  pinning, broadcasting, and moderating are absent from the request schemas, not
-  rejected by them.
+  user in the spaces the grant covers
+  ([conventions](https://docs.dfos.com/docs/api/conventions#writing)).
 
 An application acts for a user by the access they granted it through
-[Sign In With DFOS](https://protocol.dfos.com/siwd): the
+[Sign In With DFOS](https://protocol.dfos.com/integrations#sign-in): the
 [setup recipe](https://docs.dfos.com/docs/developers/sign-in-with-dfos/setup)
 takes an application from zero to a credential,
 [local apps](https://docs.dfos.com/docs/developers/sign-in-with-dfos/local-apps)
@@ -130,42 +127,22 @@ exactly the `Request` the client composes, buffering request bodies in full,
 refusing plaintext requests to non-loopback hosts, and never following
 redirects. From v0.54.0 it also mints a fresh `jti` for every non-`GET` request
 (its `jti` option: `'writes'` by default, `'always'`, or `'never'`), which is
-what the write tier requires:
-
-- **Every write's proof carries a `jti`.** A write without one is `401`. A proof
-  is accepted for its whole freshness window, so replaying one on a read merely
-  re-reads, while replaying one on a write would execute it twice; the `jti` is
-  what makes that impossible.
-- **`409` means "this already happened".** A `jti` already spent inside the
-  window is refused, and the earlier attempt may have succeeded — re-read state
-  and reconcile rather than retrying. A genuine retry carries a new `jti`;
-  resending identical bytes answers `409` until the window lapses.
-- **One body shape, the method you signed.** Request bodies are
-  `application/json` (optionally `; charset=utf-8`) and uncompressed — any other
-  `Content-Encoding` is `415` — and method-override headers or `?_method=` are
-  `400`. The `Request` openapi-fetch composes for a JSON body already satisfies
-  this.
+what the write tier requires — what the API asks of a write, and how it answers
+a repeated one, is in
+[conventions](https://docs.dfos.com/docs/api/conventions#writing).
 
 The byte contract and the two headers are specified in
-[API-AUTH](https://protocol.dfos.com/api-auth); the signing itself lives in
-`@metalabel/dfos-client`, not here.
+[API-AUTH](https://protocol.dfos.com/integrations#api-authentication); the
+signing itself lives in `@metalabel/dfos-client`, not here.
 
-Reading and writing your own data takes no credential. Every route that accepts
-a credential except `GET /v1/credential` — the own-data reads, `GET /v1/feed`,
-the comments route, the optional-auth post routes, and every write — also
-accepts a bare identity proof: `Authorization: DFOS <identity-proof JWS>` with
-no `X-Credential`, signed by one of your own identity keys. It authenticates the
-signing DID and nothing more, and on those routes that opens exactly that DID's
-own data and own actions, with no space restriction, because there is no third
-party for a grant to attenuate — so a client holding its own key reads its own
-feed and posts as itself with no grant in the picture. Presenting a credential
-alongside one is malformed (`401`): the two headers assert different claims and
-the API will not pick one. `GET /v1/credential` is not in the set — describing a
-credential takes one. The spec marks these operations with the identity
-alternative; `signApiIdentityRequest` and `buildApiIdentityHeaders` from
-`@metalabel/dfos-client/api-auth` produce the proof and its header, which you
-set on your own `fetch`, and a write signed this way carries a `jti` the same
-way (`generateJti()` mints one).
+Reading and writing your own data takes no credential: every route that accepts
+one except `GET /v1/credential` also accepts a bare identity proof signed by one
+of your own keys, which opens that DID's own data and own actions
+([conventions](https://docs.dfos.com/docs/api/conventions#reading-your-own-data-needs-no-credential)).
+`signApiIdentityRequest` and `buildApiIdentityHeaders` from
+`@metalabel/dfos-client/api-auth` produce the proof and its header, which you set
+on your own `fetch`; `generateJti()` mints the `jti` a write signed this way
+carries.
 
 ## Forward compatibility
 
@@ -196,7 +173,7 @@ must be exactly what the committed snapshot generates.
 - API reference: https://docs.dfos.com/api
 - Route guides: [profile](https://docs.dfos.com/docs/api/profile), [memberships](https://docs.dfos.com/docs/api/memberships), [credential](https://docs.dfos.com/docs/api/credential), [compatibility](https://docs.dfos.com/docs/api/compatibility)
 - Sign In With DFOS: [setup](https://docs.dfos.com/docs/developers/sign-in-with-dfos/setup), [credentials](https://docs.dfos.com/docs/developers/sign-in-with-dfos/credentials), [local apps](https://docs.dfos.com/docs/developers/sign-in-with-dfos/local-apps)
-- Protocol specs: [SIWD](https://protocol.dfos.com/siwd), [API-AUTH](https://protocol.dfos.com/api-auth)
+- Protocol specs: [SIWD](https://protocol.dfos.com/integrations#sign-in), [API-AUTH](https://protocol.dfos.com/integrations#api-authentication)
 - DFOS CLI (`dfos login`, credentials for local tools): https://github.com/metalabel/dfos/tree/main/packages/dfos-cli
 - SIWD demo, end to end: https://github.com/metalabel/dfos/tree/main/examples/siwd-demo
 - OpenAPI spec: https://api.dfos.com/openapi.json
