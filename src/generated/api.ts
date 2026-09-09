@@ -887,7 +887,7 @@ export interface components {
             uploaded: boolean;
         };
         /**
-         * @description A minted media placeholder and the presigned upload that fills it
+         * @description A minted media placeholder and the presigned upload that fills it. `media.uploaded` is `false` until the bytes land.
          * @example {
          *       "media": {
          *         "id": "media_2t9crk4hf7vz3ea8dn6r2c",
@@ -907,52 +907,7 @@ export interface components {
          *     }
          */
         PublicMediaUploadOutput: {
-            /**
-             * @description The placeholder row. `uploaded` is `false` until the bytes land.
-             * @example {
-             *       "id": "media_2t9crk4hf7vz3ea8dn6r2c",
-             *       "filename": "studio-floor.jpg",
-             *       "url": "https://dfos.imgix.net/media/public/2t9crk4hf7vz3ea8dn6r2c-studio-floor.jpg",
-             *       "contentType": "image/jpeg",
-             *       "contentLength": 812446,
-             *       "uploaded": true
-             *     }
-             */
-            media: {
-                /** @description Media object id — what an `attachment://<id>` inline body token references. Use it to match a token to its `bodyMedia` entry. */
-                id: string;
-                /** @description Original uploaded filename */
-                filename: string;
-                /** @description MIME type of the media object */
-                contentType: string;
-                /** @description Size in bytes, absent until the upload is finalized */
-                contentLength?: number;
-                /** @description Pixel width (images/video) */
-                width?: number;
-                /** @description Pixel height (images/video) */
-                height?: number;
-                /** @description Blur-hash placeholder string for progressive image loading */
-                blurHash?: string;
-                /** @description Uploader-authored caption or alt text */
-                alt?: string;
-                /** @description Playback length in milliseconds (audio/video only) */
-                durationMs?: number;
-                /** @description CDN URL of an extracted poster frame or cover art (audio/video only) */
-                posterUrl?: string;
-                /** @description Streamable MP4 rendition URL (audio/video only). Permanent for public media; a time-limited signed URL for private media. */
-                playbackUrl?: string;
-                /**
-                 * Format: date-time
-                 * @description When the signed `url` and `playbackUrl` expire (ISO 8601 UTC). Present only for private media. Signed URLs are ephemeral — re-fetch rather than persisting them.
-                 */
-                urlExpiresAt?: string;
-                /** @description Amplitude overview for audio — up to 200 integers, each 0–100 */
-                waveformPeaks?: number[];
-                /** @description Resolved URL for the object. ABSENT until `uploaded` is `true` — there is nothing at the address yet. Permanent for public images; a time-limited signed URL for private media, which also carries `urlExpiresAt`. */
-                url?: string;
-                /** @description `true` once the bytes have been received and finalized. Attach only after this is true. */
-                uploaded: boolean;
-            };
+            media: components["schemas"]["PublicOwnMediaOutput"];
             /** @description The request that puts the bytes in place. */
             upload: {
                 /** @description Presigned S3 URL. Send the bytes here yourself — DFOS never receives them. */
@@ -1558,17 +1513,23 @@ export interface components {
         /**
          * @description The space a feed item belongs to
          * @example {
-         *       "id": "did:dfos:9ctvrdn9vedda7efetrhcdakfh4cr2k",
+         *       "id": "space_vnzfk7hth9vadc3daahd48",
+         *       "did": "did:dfos:9ctvrdn9vedda7efetrhcdakfh4cr2k",
          *       "name": "DFOS",
          *       "url": "https://home.dfos.com"
          *     }
          */
         FeedSpaceRefOutput: {
             /**
-             * @description The space's protocol DID. Pass it back as `{space}` on any space-addressed route.
-             * @example did:dfos:9ctvrdn9vedda7efetrhcdakfh4cr2k
+             * @description The space's stable entity id. Pass it back as `{space}` on any space-addressed route, for a space with a public profile — a space without one is a 404 on every such route, which is what makes the feed the only place it can be read.
+             * @example space_vnzfk7hth9vadc3daahd48
              */
             id: string;
+            /**
+             * @description The space's protocol DID. Also accepted as `{space}`.
+             * @example did:dfos:9ctvrdn9vedda7efetrhcdakfh4cr2k
+             */
+            did: string;
             /** @description Space display name, or null */
             name: string | null;
             /** @description The space's public web address: its custom domain, else the `space-{id}` subdomain. Present for private spaces too, where the address is real but does not resolve anonymously. */
@@ -1613,7 +1574,8 @@ export interface components {
          *         "upvoted": true
          *       },
          *       "space": {
-         *         "id": "did:dfos:9ctvrdn9vedda7efetrhcdakfh4cr2k",
+         *         "id": "space_vnzfk7hth9vadc3daahd48",
+         *         "did": "did:dfos:9ctvrdn9vedda7efetrhcdakfh4cr2k",
          *         "name": "DFOS",
          *         "url": "https://home.dfos.com"
          *       }
@@ -1704,7 +1666,8 @@ export interface components {
          *             "upvoted": true
          *           },
          *           "space": {
-         *             "id": "did:dfos:9ctvrdn9vedda7efetrhcdakfh4cr2k",
+         *             "id": "space_vnzfk7hth9vadc3daahd48",
+         *             "did": "did:dfos:9ctvrdn9vedda7efetrhcdakfh4cr2k",
          *             "name": "DFOS",
          *             "url": "https://home.dfos.com"
          *           }
@@ -1731,7 +1694,8 @@ export interface components {
          *             "upvoted": false
          *           },
          *           "space": {
-         *             "id": "did:dfos:f3a4ncdta66627c6e2cnhhndan7k882",
+         *             "id": "space_z94a849d9kdftfvv3n9hn7",
+         *             "did": "did:dfos:f3a4ncdta66627c6e2cnhhndan7k882",
          *             "name": "POPULAR",
          *             "url": "https://rakowwwski.dfos.com"
          *           }
@@ -1759,7 +1723,7 @@ export interface components {
         /**
          * @description A comment on a post
          * @example {
-         *       "id": "comment_9rze4tk2vdc7fa38nhe6c2",
+         *       "id": "post_9rze4tk2vdc7fa38nhe6c2",
          *       "postId": "post_ze2kh2d47tzerkhet8348c",
          *       "author": {
          *         "did": "did:dfos:2228ka2thkre4ft44d73r232nfvdf2t",
@@ -1816,7 +1780,7 @@ export interface components {
          * @example {
          *       "items": [
          *         {
-         *           "id": "comment_9rze4tk2vdc7fa38nhe6c2",
+         *           "id": "post_9rze4tk2vdc7fa38nhe6c2",
          *           "postId": "post_ze2kh2d47tzerkhet8348c",
          *           "author": {
          *             "did": "did:dfos:2228ka2thkre4ft44d73r232nfvdf2t",
@@ -1853,9 +1817,9 @@ export interface components {
         /**
          * @description A comment, as returned by a write
          * @example {
-         *       "id": "comment_d6ah3f9rkt2ez48vc7n4rc",
+         *       "id": "post_d6ah3f9rkt2ez48vc7n4rc",
          *       "postId": "post_ze2kh2d47tzerkhet8348c",
-         *       "parentCommentId": "comment_9rze4tk2vdc7fa38nhe6c2",
+         *       "parentCommentId": "post_9rze4tk2vdc7fa38nhe6c2",
          *       "author": {
          *         "did": "did:dfos:z8zt7ecn9h8n782kae3k796crva2c73",
          *         "displayName": "Brandon",
@@ -4008,6 +3972,28 @@ export interface components {
                 };
             };
         };
+        /** @description The request could not be acted on as sent: a parameter this endpoint does not serve, a value outside its range, or a method override this API refuses. Inputs are closed — an unknown member is refused, not ignored. */
+        InvalidRequest: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "code": "E_INVALID_REQUEST",
+                 *       "status": 400,
+                 *       "message": "Input validation failed"
+                 *     }
+                 */
+                "application/json": {
+                    /** @constant */
+                    code: "E_INVALID_REQUEST";
+                    /** @constant */
+                    status: 400;
+                    message: string;
+                };
+            };
+        };
         /** @description The request was refused. Unknown, expired, spent and wrong-nonce ceremonies all answer "this ceremony is not open"; only a bad signature consumes the ceremony, so any other refusal leaves the code live to re-resolve and retry. */
         KeyProofRejected: {
             headers: {
@@ -4194,6 +4180,28 @@ export interface components {
                 };
             };
         };
+        /** @description Something failed on our side. Nothing about the request is wrong, but its outcome is unknown: a create may have committed before the answer failed. Re-read state before retrying a write, and retry with a new `jti`; reads can simply retry with backoff. The body carries no detail beyond this, deliberately. */
+        InternalError: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "code": "E_INTERNAL",
+                 *       "status": 500,
+                 *       "message": "unexpected error"
+                 *     }
+                 */
+                "application/json": {
+                    /** @constant */
+                    code: "E_INTERNAL";
+                    /** @constant */
+                    status: 500;
+                    message: string;
+                };
+            };
+        };
         /** @description Any other error the API itself produces. Branch on `code` and `status`; the enumerated statuses on each operation are what this contract promises. An intermediary may answer with a non-JSON 5xx body — check `Content-Type` before parsing. */
         Error: {
             headers: {
@@ -4231,8 +4239,10 @@ export interface operations {
                     "application/json": components["schemas"]["SpaceOutput"];
                 };
             };
+            400: components["responses"]["InvalidRequest"];
             404: components["responses"]["NotFound"];
             429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
             default: components["responses"]["Error"];
         };
@@ -4263,7 +4273,9 @@ export interface operations {
                     "application/json": components["schemas"]["SpaceDiscoveryPageOutput"];
                 };
             };
+            400: components["responses"]["InvalidRequest"];
             429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
             default: components["responses"]["Error"];
         };
@@ -4297,8 +4309,14 @@ export interface operations {
                     "application/json": components["schemas"]["PublicPostPageOutput"];
                 };
             };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["ProofRequired"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
             429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
             default: components["responses"]["Error"];
         };
@@ -4355,6 +4373,7 @@ export interface operations {
             413: components["responses"]["PayloadTooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
             429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
             default: components["responses"]["Error"];
         };
@@ -4380,8 +4399,14 @@ export interface operations {
                     "application/json": components["schemas"]["PublicGetPostOutput"];
                 };
             };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["ProofRequired"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
             429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
             default: components["responses"]["Error"];
         };
@@ -4415,6 +4440,7 @@ export interface operations {
             413: components["responses"]["PayloadTooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
             429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
             default: components["responses"]["Error"];
         };
@@ -4469,6 +4495,7 @@ export interface operations {
             413: components["responses"]["PayloadTooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
             429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
             default: components["responses"]["Error"];
         };
@@ -4502,6 +4529,7 @@ export interface operations {
             413: components["responses"]["PayloadTooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
             429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
             default: components["responses"]["Error"];
         };
@@ -4535,6 +4563,7 @@ export interface operations {
             413: components["responses"]["PayloadTooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
             429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
             default: components["responses"]["Error"];
         };
@@ -4566,8 +4595,14 @@ export interface operations {
                     "application/json": components["schemas"]["PublicCommentPageOutput"];
                 };
             };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["ProofRequired"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
             429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
             default: components["responses"]["Error"];
         };
@@ -4596,7 +4631,7 @@ export interface operations {
                     attachments?: string[];
                     /**
                      * @description Reply to this comment rather than to the post. Must be a comment on the same root post.
-                     * @example comment_9rze4tk2vdc7fa38nhe6c2
+                     * @example post_9rze4tk2vdc7fa38nhe6c2
                      */
                     parentCommentId?: string;
                 };
@@ -4620,6 +4655,7 @@ export interface operations {
             413: components["responses"]["PayloadTooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
             429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
             default: components["responses"]["Error"];
         };
@@ -4653,6 +4689,7 @@ export interface operations {
             413: components["responses"]["PayloadTooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
             429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
             default: components["responses"]["Error"];
         };
@@ -4700,6 +4737,7 @@ export interface operations {
             413: components["responses"]["PayloadTooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
             429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
             default: components["responses"]["Error"];
         };
@@ -4733,6 +4771,7 @@ export interface operations {
             413: components["responses"]["PayloadTooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
             429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
             default: components["responses"]["Error"];
         };
@@ -4766,6 +4805,7 @@ export interface operations {
             413: components["responses"]["PayloadTooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
             429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
             default: components["responses"]["Error"];
         };
@@ -4818,6 +4858,7 @@ export interface operations {
             413: components["responses"]["PayloadTooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
             429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
             default: components["responses"]["Error"];
         };
@@ -4843,11 +4884,14 @@ export interface operations {
                     "application/json": components["schemas"]["PublicOwnMediaOutput"];
                 };
             };
+            400: components["responses"]["InvalidRequest"];
             401: components["responses"]["ProofRequired"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
             429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
             default: components["responses"]["Error"];
         };
@@ -4874,7 +4918,13 @@ export interface operations {
                     "application/json": components["schemas"]["FeedPageOutput"];
                 };
             };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["ProofRequired"];
+            403: components["responses"]["Forbidden"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
             429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
             default: components["responses"]["Error"];
         };
@@ -4903,8 +4953,10 @@ export interface operations {
                     "application/json": components["schemas"]["PublicPagePageOutput"];
                 };
             };
+            400: components["responses"]["InvalidRequest"];
             404: components["responses"]["NotFound"];
             429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
             default: components["responses"]["Error"];
         };
@@ -4930,8 +4982,10 @@ export interface operations {
                     "application/json": components["schemas"]["PublicPageOutput"];
                 };
             };
+            400: components["responses"]["InvalidRequest"];
             404: components["responses"]["NotFound"];
             429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
             default: components["responses"]["Error"];
         };
@@ -4962,8 +5016,10 @@ export interface operations {
                     "application/json": components["schemas"]["PublicEventPageOutput"];
                 };
             };
+            400: components["responses"]["InvalidRequest"];
             404: components["responses"]["NotFound"];
             429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
             default: components["responses"]["Error"];
         };
@@ -4991,8 +5047,10 @@ export interface operations {
                     "application/json": components["schemas"]["PublicEventOutput"];
                 };
             };
+            400: components["responses"]["InvalidRequest"];
             404: components["responses"]["NotFound"];
             429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
             default: components["responses"]["Error"];
         };
@@ -5021,7 +5079,9 @@ export interface operations {
                     "application/json": components["schemas"]["PublicEventPageOutput"];
                 };
             };
+            400: components["responses"]["InvalidRequest"];
             429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
             default: components["responses"]["Error"];
         };
@@ -5050,8 +5110,10 @@ export interface operations {
                     "application/json": components["schemas"]["PublicProductPageOutput"];
                 };
             };
+            400: components["responses"]["InvalidRequest"];
             404: components["responses"]["NotFound"];
             429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
             default: components["responses"]["Error"];
         };
@@ -5078,7 +5140,9 @@ export interface operations {
                     "application/json": components["schemas"]["PublicProductFeedPageOutput"];
                 };
             };
+            400: components["responses"]["InvalidRequest"];
             429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
             default: components["responses"]["Error"];
         };
@@ -5104,8 +5168,10 @@ export interface operations {
                     "application/json": components["schemas"]["PublicProductOutput"];
                 };
             };
+            400: components["responses"]["InvalidRequest"];
             404: components["responses"]["NotFound"];
             429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
             default: components["responses"]["Error"];
         };
@@ -5134,8 +5200,10 @@ export interface operations {
                     "application/json": components["schemas"]["PublicReleasePageOutput"];
                 };
             };
+            400: components["responses"]["InvalidRequest"];
             404: components["responses"]["NotFound"];
             429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
             default: components["responses"]["Error"];
         };
@@ -5162,7 +5230,9 @@ export interface operations {
                     "application/json": components["schemas"]["PublicReleaseFeedPageOutput"];
                 };
             };
+            400: components["responses"]["InvalidRequest"];
             429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
             default: components["responses"]["Error"];
         };
@@ -5188,8 +5258,10 @@ export interface operations {
                     "application/json": components["schemas"]["PublicReleaseOutput"];
                 };
             };
+            400: components["responses"]["InvalidRequest"];
             404: components["responses"]["NotFound"];
             429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
             default: components["responses"]["Error"];
         };
@@ -5218,8 +5290,10 @@ export interface operations {
                     "application/json": components["schemas"]["PublicTopicPageOutput"];
                 };
             };
+            400: components["responses"]["InvalidRequest"];
             404: components["responses"]["NotFound"];
             429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
             default: components["responses"]["Error"];
         };
@@ -5245,8 +5319,10 @@ export interface operations {
                     "application/json": components["schemas"]["PublicTopicOutput"];
                 };
             };
+            400: components["responses"]["InvalidRequest"];
             404: components["responses"]["NotFound"];
             429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
             default: components["responses"]["Error"];
         };
@@ -5271,8 +5347,10 @@ export interface operations {
                     "application/json": components["schemas"]["PublicUserOutput"];
                 };
             };
+            400: components["responses"]["InvalidRequest"];
             404: components["responses"]["NotFound"];
             429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
             default: components["responses"]["Error"];
         };
@@ -5299,7 +5377,9 @@ export interface operations {
                     "application/json": components["schemas"]["PublicUserPageOutput"];
                 };
             };
+            400: components["responses"]["InvalidRequest"];
             429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
             default: components["responses"]["Error"];
         };
@@ -5328,8 +5408,10 @@ export interface operations {
                     "application/json": components["schemas"]["PublicUserSpacePageOutput"];
                 };
             };
+            400: components["responses"]["InvalidRequest"];
             404: components["responses"]["NotFound"];
             429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
             default: components["responses"]["Error"];
         };
@@ -5369,10 +5451,13 @@ export interface operations {
                     };
                 };
             };
+            400: components["responses"]["InvalidRequest"];
             401: components["responses"]["ProofRequired"];
             403: components["responses"]["Forbidden"];
             413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
             429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
             default: components["responses"]["Error"];
         };
@@ -5400,10 +5485,13 @@ export interface operations {
                     "application/json": components["schemas"]["MembershipPageOutput"];
                 };
             };
+            400: components["responses"]["InvalidRequest"];
             401: components["responses"]["ProofRequired"];
             403: components["responses"]["Forbidden"];
             413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
             429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
             default: components["responses"]["Error"];
         };
@@ -5428,11 +5516,14 @@ export interface operations {
                     "application/json": components["schemas"]["MembershipOutput"];
                 };
             };
+            400: components["responses"]["InvalidRequest"];
             401: components["responses"]["ProofRequired"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["MembershipNotFound"];
             413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
             429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
             default: components["responses"]["Error"];
         };
@@ -5461,10 +5552,13 @@ export interface operations {
                     "application/json": components["schemas"]["GroupMembershipPageOutput"];
                 };
             };
+            400: components["responses"]["InvalidRequest"];
             401: components["responses"]["ProofRequired"];
             403: components["responses"]["Forbidden"];
             413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
             429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
             default: components["responses"]["Error"];
         };
@@ -5489,11 +5583,14 @@ export interface operations {
                     "application/json": components["schemas"]["GroupMembershipOutput"];
                 };
             };
+            400: components["responses"]["InvalidRequest"];
             401: components["responses"]["ProofRequired"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["MembershipNotFound"];
             413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
             429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
             default: components["responses"]["Error"];
         };
@@ -5516,10 +5613,13 @@ export interface operations {
                     "application/json": components["schemas"]["CredentialIntrospectionOutput"];
                 };
             };
+            400: components["responses"]["InvalidRequest"];
             401: components["responses"]["ProofRequired"];
             403: components["responses"]["Forbidden"];
             413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
             429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
             default: components["responses"]["Error"];
         };
@@ -5587,6 +5687,7 @@ export interface operations {
             };
             400: components["responses"]["KeyProofRejected"];
             429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
             default: components["responses"]["Error"];
         };
@@ -5633,6 +5734,7 @@ export interface operations {
             };
             400: components["responses"]["KeyProofRejected"];
             429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
             default: components["responses"]["Error"];
         };
@@ -5656,6 +5758,7 @@ export interface operations {
                 };
             };
             429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
             default: components["responses"]["Error"];
         };

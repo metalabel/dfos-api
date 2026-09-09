@@ -2,7 +2,7 @@
   "info": {
     "title": "The DFOS API",
     "version": "1.0.0-beta",
-    "description": "The HTTP API for Dark Forest OS at `https://api.dfos.com/v1/` — spaces, posts,\npages, events, products, and profiles. Guides: https://docs.dfos.com/api.\n\n**Anonymous** is the default and most of the surface; those responses are\nviewer-independent.\n\n**Gated** routes need a proof and describe one person: the granting user's\nprofile, memberships, credential, feed, and a post's comments.\n\n**Optional-auth** routes — `GET /spaces/{space}/posts` and\n`GET /spaces/{space}/posts/{postId}` — serve the anonymous projection to\neveryone, and the granting user's view to a credential covering that space with\n`read:posts`. A grant only ever adds: an uncovered grant returns the anonymous\nbody byte for byte, and a bad proof is still a `401`/`403`.\n\n**Authenticating.** Access is proof-of-possession: the credential the user\nissued through Sign In With DFOS, plus a fresh request proof signed by the key\nit was issued to, binding this exact method, host, path, and body. See\n[DFOS API-AUTH](https://protocol.dfos.com/integrations#api-authentication).\n\n```\nAuthorization: DFOS <request-proof JWS>\nX-Credential:  <credential JWS>\n```\n\nTo reach your own data a bare identity proof is enough: `Authorization: DFOS\n<identity-proof JWS>` with no `X-Credential`, signed by one of your own keys.\nPresenting both is malformed (`401`).\n\n`401` means the proof failed, so sign a correct one; `403` means the grant does\nnot cover this. `WWW-Authenticate` is best-effort — infrastructure between your\nclient and this API can rename or drop it — so branch on the status and the\nerror body.\n\n**Writing.** Posts (`write:posts`), comments (`write:comments`), and upvotes on\neither (`write:upvotes`) write as the granting user, in the spaces a grant\ncovers:\n\n- Every write proof carries a `jti`; without one, `401`.\n- A spent `jti` is `409`: the first attempt may have succeeded, so re-read state\n  and retry with a new `jti`.\n- Bodies are `application/json` and uncompressed: another media type or a\n  `Content-Encoding` other than `identity` is `415`, and\n  `X-HTTP-Method-Override` or `?_method=` is `400`.\n- Own content only — no announce, broadcast, pin, backdate, view-access\n  override, or moderation. Bodies are closed: an unknown member is a `400`.\n\n**Attaching a file.** `POST /spaces/{space}/media` mints a presigned S3 `PUT`\nunder either write scope; you send the bytes to it yourself with both returned\nheaders and a body exactly `size` long, poll\n`GET /spaces/{space}/media/{mediaId}` until `uploaded` is `true`, then pass the\nid in `attachments` on a post or comment write. An upload never attached is\nreclaimed after 30 days.\n\n**Adding a signing key.** `POST /key-proof/present` presents a signed envelope\nproving possession of a public key, against a ceremony minted in the DFOS app;\n`GET /key-proof/status` polls it. Presenting does not add the key: the owner\nadopts or rejects it in DFOS settings. Discovery is a well-known outside `/v1`:\n\n```\nGET https://{this host}/.well-known/dfos-key-proof?code={the 8-character code}\n→ 200 {\n    \"present\": \"…\", \"nonce\": \"…\", \"audience\": \"…\", \"purpose\": \"…\",\n    \"roleSet\": \"…\", \"prevCID\": \"…\", \"expiresAt\": \"…\", \"relay\": \"…\",\n    \"adopts\": { \"did\": \"…\", \"handle\": \"…\", \"displayName\": \"…\" }\n  }\n→ 404 { \"error\": \"unknown or expired code\" }\n```\n\nPOST to `present` verbatim. `nonce`, `audience`, `did`, `prevCID`\nand `roleSet` (`auth,assert` or `controller`) are supplied, not chosen — sign\nthe set you were handed, and show your human the identity and role set first.\n`relay` is the origin of the relay serving this deployment's identity index —\nadvisory only; the platform re-checks authoritatively at adoption. Unknown and\nexpired codes answer identically.\n\n- Tolerate unknown fields and unknown enum values.\n- Cursors are opaque: pass `nextCursor`/`previousCursor` back verbatim.\n- A space's `id` and protocol `did` are canonical; its subdomain is a mutable\n  alias.\n- A non-public space and a missing one return the same `404`.\n- Data responses are `no-store`. Signed media URLs are ephemeral: re-fetch\n  rather than persist (see `urlExpiresAt`).",
+    "description": "The HTTP API for Dark Forest OS at `https://api.dfos.com/v1/` — spaces, posts,\npages, events, products, releases, and profiles. Guides: https://docs.dfos.com/api.\n\n**Anonymous** is the default and most of the surface; those responses are\nviewer-independent.\n\n**Gated** routes need a proof and describe one person: the granting user's\nprofile, memberships, credential, feed, and a post's comments.\n\n**Optional-auth** routes — `GET /spaces/{space}/posts` and\n`GET /spaces/{space}/posts/{postId}` — serve the anonymous projection to\neveryone, and the granting user's view to a credential covering that space with\n`read:posts`. A grant only ever adds: an uncovered grant returns the anonymous\nbody byte for byte, and a bad proof is still a `401`/`403`.\n\n**Authenticating.** Access is proof-of-possession: the credential the user\nissued through Sign In With DFOS, plus a fresh request proof signed by the key\nit was issued to, binding this exact method, host, path, and body. See\n[DFOS API-AUTH](https://protocol.dfos.com/integrations#api-authentication).\n\n```\nAuthorization: DFOS <request-proof JWS>\nX-Credential:  <credential JWS>\n```\n\nTo reach your own data a bare identity proof is enough: `Authorization: DFOS\n<identity-proof JWS>` with no `X-Credential`, signed by one of your own keys.\nPresenting both is malformed (`401`).\n\n`401` means the proof failed, so sign a correct one; `403` means the grant does\nnot cover this. `WWW-Authenticate` is best-effort — infrastructure between your\nclient and this API can rename or drop it — so branch on the status and the\nerror body.\n\n**Writing.** Posts (`write:posts`), comments (`write:comments`), and upvotes on\neither (`write:upvotes`) write as the granting user, in the spaces a grant\ncovers:\n\n- Every write proof carries a `jti`; without one, `401`.\n- A spent `jti` is `409`: the first attempt may have succeeded, so re-read state\n  and retry with a new `jti`.\n- Bodies are `application/json` and uncompressed: another media type or a\n  `Content-Encoding` other than `identity` is `415`, and\n  `X-HTTP-Method-Override` or `?_method=` is `400`.\n- Own content only — no announce, broadcast, pin, backdate, view-access\n  override, or moderation. Bodies are closed: an unknown member is a `400`.\n\n**Attaching a file.** `POST /spaces/{space}/media` mints a presigned S3 `PUT`\nunder either write scope; you send the bytes to it yourself with both returned\nheaders and a body exactly `size` long, poll\n`GET /spaces/{space}/media/{mediaId}` until `uploaded` is `true`, then pass the\nid in `attachments` on a post or comment write. An upload never attached is\nreclaimed after 30 days.\n\n**Adding a signing key.** `POST /key-proof/present` presents a signed envelope\nproving possession of a public key, against a ceremony minted in the DFOS app;\n`GET /key-proof/status` polls it. Presenting does not add the key: the owner\nadopts or rejects it in DFOS settings. Discovery is a well-known outside `/v1`:\n\n```\nGET https://{this host}/.well-known/dfos-key-proof?code={the 8-character code}\n→ 200 {\n    \"present\": \"…\", \"nonce\": \"…\", \"audience\": \"…\", \"purpose\": \"…\",\n    \"roleSet\": \"…\", \"prevCID\": \"…\", \"expiresAt\": \"…\", \"relay\": \"…\",\n    \"adopts\": { \"did\": \"…\", \"handle\": \"…\", \"displayName\": \"…\" }\n  }\n→ 404 { \"error\": \"unknown or expired code\" }\n```\n\nPOST to `present` verbatim. `nonce`, `audience`, `did`, `prevCID`\nand `roleSet` (`auth,assert` or `controller`) are supplied, not chosen — sign\nthe set you were handed, and show your human the identity and role set first.\n`relay` is the origin of the relay serving this deployment's identity index —\nadvisory only; the platform re-checks authoritatively at adoption. Unknown and\nexpired codes answer identically.\n\n- Tolerate unknown fields and unknown enum values.\n- Cursors are opaque: pass `nextCursor`/`previousCursor` back verbatim.\n- A space's `id` and protocol `did` are canonical; its subdomain is a mutable\n  alias.\n- A non-public space and a missing one return the same `404`.\n- Data responses are `no-store`. Signed media URLs are ephemeral: re-fetch\n  rather than persist (see `urlExpiresAt`).",
     "contact": {
       "name": "DFOS",
       "url": "https://docs.dfos.com/api"
@@ -275,102 +275,7 @@
         "type": "object",
         "properties": {
           "media": {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string",
-                "description": "Media object id — what an `attachment://<id>` inline body token references. Use it to match a token to its `bodyMedia` entry."
-              },
-              "filename": {
-                "type": "string",
-                "description": "Original uploaded filename"
-              },
-              "contentType": {
-                "type": "string",
-                "description": "MIME type of the media object"
-              },
-              "contentLength": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 9007199254740991,
-                "description": "Size in bytes, absent until the upload is finalized"
-              },
-              "width": {
-                "type": "integer",
-                "minimum": 1,
-                "maximum": 9007199254740991,
-                "description": "Pixel width (images/video)"
-              },
-              "height": {
-                "type": "integer",
-                "minimum": 1,
-                "maximum": 9007199254740991,
-                "description": "Pixel height (images/video)"
-              },
-              "blurHash": {
-                "type": "string",
-                "description": "Blur-hash placeholder string for progressive image loading"
-              },
-              "alt": {
-                "type": "string",
-                "description": "Uploader-authored caption or alt text"
-              },
-              "durationMs": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 9007199254740991,
-                "description": "Playback length in milliseconds (audio/video only)"
-              },
-              "posterUrl": {
-                "type": "string",
-                "description": "CDN URL of an extracted poster frame or cover art (audio/video only)"
-              },
-              "playbackUrl": {
-                "type": "string",
-                "description": "Streamable MP4 rendition URL (audio/video only). Permanent for public media; a time-limited signed URL for private media."
-              },
-              "urlExpiresAt": {
-                "type": "string",
-                "format": "date-time",
-                "description": "When the signed `url` and `playbackUrl` expire (ISO 8601 UTC). Present only for private media. Signed URLs are ephemeral — re-fetch rather than persisting them."
-              },
-              "waveformPeaks": {
-                "type": "array",
-                "maxItems": 200,
-                "items": {
-                  "type": "integer",
-                  "minimum": 0,
-                  "maximum": 100
-                },
-                "description": "Amplitude overview for audio — up to 200 integers, each 0–100"
-              },
-              "url": {
-                "type": "string",
-                "description": "Resolved URL for the object. ABSENT until `uploaded` is `true` — there is nothing at the address yet. Permanent for public images; a time-limited signed URL for private media, which also carries `urlExpiresAt`."
-              },
-              "uploaded": {
-                "type": "boolean",
-                "description": "`true` once the bytes have been received and finalized. Attach only after this is true."
-              }
-            },
-            "required": [
-              "id",
-              "filename",
-              "contentType",
-              "uploaded"
-            ],
-            "additionalProperties": false,
-            "description": "The placeholder row. `uploaded` is `false` until the bytes land.",
-            "examples": [
-              {
-                "id": "media_2t9crk4hf7vz3ea8dn6r2c",
-                "filename": "studio-floor.jpg",
-                "url": "https://dfos.imgix.net/media/public/2t9crk4hf7vz3ea8dn6r2c-studio-floor.jpg",
-                "contentType": "image/jpeg",
-                "contentLength": 812446,
-                "uploaded": true
-              }
-            ]
+            "$ref": "#/components/schemas/PublicOwnMediaOutput"
           },
           "upload": {
             "type": "object",
@@ -423,7 +328,7 @@
           "upload"
         ],
         "additionalProperties": false,
-        "description": "A minted media placeholder and the presigned upload that fills it",
+        "description": "A minted media placeholder and the presigned upload that fills it. `media.uploaded` is `false` until the bytes land.",
         "examples": [
           {
             "media": {
@@ -1679,8 +1584,15 @@
         "properties": {
           "id": {
             "type": "string",
+            "description": "The space's stable entity id. Pass it back as `{space}` on any space-addressed route, for a space with a public profile — a space without one is a 404 on every such route, which is what makes the feed the only place it can be read.",
+            "examples": [
+              "space_vnzfk7hth9vadc3daahd48"
+            ]
+          },
+          "did": {
+            "type": "string",
             "pattern": "^did:dfos:[2346789acdefhknrtvz]{31}$",
-            "description": "The space's protocol DID. Pass it back as `{space}` on any space-addressed route.",
+            "description": "The space's protocol DID. Also accepted as `{space}`.",
             "examples": [
               "did:dfos:9ctvrdn9vedda7efetrhcdakfh4cr2k"
             ]
@@ -1703,6 +1615,7 @@
         },
         "required": [
           "id",
+          "did",
           "name",
           "url"
         ],
@@ -1710,7 +1623,8 @@
         "description": "The space a feed item belongs to",
         "examples": [
           {
-            "id": "did:dfos:9ctvrdn9vedda7efetrhcdakfh4cr2k",
+            "id": "space_vnzfk7hth9vadc3daahd48",
+            "did": "did:dfos:9ctvrdn9vedda7efetrhcdakfh4cr2k",
             "name": "DFOS",
             "url": "https://home.dfos.com"
           }
@@ -1891,7 +1805,8 @@
               "upvoted": true
             },
             "space": {
-              "id": "did:dfos:9ctvrdn9vedda7efetrhcdakfh4cr2k",
+              "id": "space_vnzfk7hth9vadc3daahd48",
+              "did": "did:dfos:9ctvrdn9vedda7efetrhcdakfh4cr2k",
               "name": "DFOS",
               "url": "https://home.dfos.com"
             }
@@ -1988,7 +1903,8 @@
                   "upvoted": true
                 },
                 "space": {
-                  "id": "did:dfos:9ctvrdn9vedda7efetrhcdakfh4cr2k",
+                  "id": "space_vnzfk7hth9vadc3daahd48",
+                  "did": "did:dfos:9ctvrdn9vedda7efetrhcdakfh4cr2k",
                   "name": "DFOS",
                   "url": "https://home.dfos.com"
                 }
@@ -2015,7 +1931,8 @@
                   "upvoted": false
                 },
                 "space": {
-                  "id": "did:dfos:f3a4ncdta66627c6e2cnhhndan7k882",
+                  "id": "space_z94a849d9kdftfvv3n9hn7",
+                  "did": "did:dfos:f3a4ncdta66627c6e2cnhhndan7k882",
                   "name": "POPULAR",
                   "url": "https://rakowwwski.dfos.com"
                 }
@@ -2133,7 +2050,7 @@
         "description": "A comment on a post",
         "examples": [
           {
-            "id": "comment_9rze4tk2vdc7fa38nhe6c2",
+            "id": "post_9rze4tk2vdc7fa38nhe6c2",
             "postId": "post_ze2kh2d47tzerkhet8348c",
             "author": {
               "did": "did:dfos:2228ka2thkre4ft44d73r232nfvdf2t",
@@ -2207,7 +2124,7 @@
           {
             "items": [
               {
-                "id": "comment_9rze4tk2vdc7fa38nhe6c2",
+                "id": "post_9rze4tk2vdc7fa38nhe6c2",
                 "postId": "post_ze2kh2d47tzerkhet8348c",
                 "author": {
                   "did": "did:dfos:2228ka2thkre4ft44d73r232nfvdf2t",
@@ -2322,9 +2239,9 @@
         "description": "A comment, as returned by a write",
         "examples": [
           {
-            "id": "comment_d6ah3f9rkt2ez48vc7n4rc",
+            "id": "post_d6ah3f9rkt2ez48vc7n4rc",
             "postId": "post_ze2kh2d47tzerkhet8348c",
-            "parentCommentId": "comment_9rze4tk2vdc7fa38nhe6c2",
+            "parentCommentId": "post_9rze4tk2vdc7fa38nhe6c2",
             "author": {
               "did": "did:dfos:z8zt7ecn9h8n782kae3k796crva2c73",
               "displayName": "Brandon",
@@ -6523,6 +6440,37 @@
           }
         }
       },
+      "InvalidRequest": {
+        "description": "The request could not be acted on as sent: a parameter this endpoint does not serve, a value outside its range, or a method override this API refuses. Inputs are closed — an unknown member is refused, not ignored.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "required": [
+                "code",
+                "status",
+                "message"
+              ],
+              "properties": {
+                "code": {
+                  "const": "E_INVALID_REQUEST"
+                },
+                "status": {
+                  "const": 400
+                },
+                "message": {
+                  "type": "string"
+                }
+              }
+            },
+            "example": {
+              "code": "E_INVALID_REQUEST",
+              "status": 400,
+              "message": "Input validation failed"
+            }
+          }
+        }
+      },
       "KeyProofRejected": {
         "description": "The request was refused. Unknown, expired, spent and wrong-nonce ceremonies all answer \"this ceremony is not open\"; only a bad signature consumes the ceremony, so any other refusal leaves the code live to re-resolve and retry.",
         "content": {
@@ -6793,6 +6741,37 @@
           }
         }
       },
+      "InternalError": {
+        "description": "Something failed on our side. Nothing about the request is wrong, but its outcome is unknown: a create may have committed before the answer failed. Re-read state before retrying a write, and retry with a new `jti`; reads can simply retry with backoff. The body carries no detail beyond this, deliberately.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "required": [
+                "code",
+                "status",
+                "message"
+              ],
+              "properties": {
+                "code": {
+                  "const": "E_INTERNAL"
+                },
+                "status": {
+                  "const": 500
+                },
+                "message": {
+                  "type": "string"
+                }
+              }
+            },
+            "example": {
+              "code": "E_INTERNAL",
+              "status": 500,
+              "message": "unexpected error"
+            }
+          }
+        }
+      },
       "Error": {
         "description": "Any other error the API itself produces. Branch on `code` and `status`; the enumerated statuses on each operation are what this contract promises. An intermediary may answer with a non-JSON 5xx body — check `Content-Type` before parsing.",
         "content": {
@@ -6918,11 +6897,17 @@
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -7046,8 +7031,14 @@
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
           "429": {
             "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -7207,11 +7198,29 @@
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/ProofRequired"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
           "429": {
             "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -7364,6 +7373,9 @@
           "429": {
             "$ref": "#/components/responses/RateLimited"
           },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
           },
@@ -7444,11 +7456,29 @@
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/ProofRequired"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
           "429": {
             "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -7604,6 +7634,9 @@
           "429": {
             "$ref": "#/components/responses/RateLimited"
           },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
           },
@@ -7705,6 +7738,9 @@
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -7810,6 +7846,9 @@
           "429": {
             "$ref": "#/components/responses/RateLimited"
           },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
           },
@@ -7912,6 +7951,9 @@
           "429": {
             "$ref": "#/components/responses/RateLimited"
           },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
           },
@@ -7987,7 +8029,7 @@
               "type": "string",
               "description": "List the replies to this comment instead of the post's root comments. Hold it constant while walking cursors.",
               "examples": [
-                "comment_9rze4tk2vdc7fa38nhe6c2"
+                "post_9rze4tk2vdc7fa38nhe6c2"
               ]
             },
             "allowEmptyValue": true,
@@ -8061,11 +8103,29 @@
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/ProofRequired"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
           "429": {
             "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -8162,7 +8222,7 @@
                     "type": "string",
                     "description": "Reply to this comment rather than to the post. Must be a comment on the same root post.",
                     "examples": [
-                      "comment_9rze4tk2vdc7fa38nhe6c2"
+                      "post_9rze4tk2vdc7fa38nhe6c2"
                     ]
                   }
                 },
@@ -8173,7 +8233,7 @@
                     "attachments": [
                       "media_2t9crk4hf7vz3ea8dn6r2c"
                     ],
-                    "parentCommentId": "comment_9rze4tk2vdc7fa38nhe6c2"
+                    "parentCommentId": "post_9rze4tk2vdc7fa38nhe6c2"
                   }
                 ]
               }
@@ -8215,6 +8275,9 @@
           "429": {
             "$ref": "#/components/responses/RateLimited"
           },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
           },
@@ -8238,12 +8301,12 @@
           {
             "lang": "curl",
             "label": "curl (identity proof)",
-            "source": "curl -X POST 'https://api.dfos.com/v1/spaces/home/posts/post_ze2kh2d47tzerkhet8348c/comments' \\\n  -H 'Authorization: DFOS <identity-proof>' \\\n  -H 'Content-Type: application/json' \\\n  --data '{\n  \"body\": \"Same. That and origin binding running in both directions.\",\n  \"attachments\": [\n    \"media_2t9crk4hf7vz3ea8dn6r2c\"\n  ],\n  \"parentCommentId\": \"comment_9rze4tk2vdc7fa38nhe6c2\"\n}'"
+            "source": "curl -X POST 'https://api.dfos.com/v1/spaces/home/posts/post_ze2kh2d47tzerkhet8348c/comments' \\\n  -H 'Authorization: DFOS <identity-proof>' \\\n  -H 'Content-Type: application/json' \\\n  --data '{\n  \"body\": \"Same. That and origin binding running in both directions.\",\n  \"attachments\": [\n    \"media_2t9crk4hf7vz3ea8dn6r2c\"\n  ],\n  \"parentCommentId\": \"post_9rze4tk2vdc7fa38nhe6c2\"\n}'"
           },
           {
             "lang": "curl",
             "label": "curl (delegated)",
-            "source": "curl -X POST 'https://api.dfos.com/v1/spaces/home/posts/post_ze2kh2d47tzerkhet8348c/comments' \\\n  -H 'Authorization: DFOS <request-proof>' \\\n  -H 'X-Credential: <credential>' \\\n  -H 'Content-Type: application/json' \\\n  --data '{\n  \"body\": \"Same. That and origin binding running in both directions.\",\n  \"attachments\": [\n    \"media_2t9crk4hf7vz3ea8dn6r2c\"\n  ],\n  \"parentCommentId\": \"comment_9rze4tk2vdc7fa38nhe6c2\"\n}'"
+            "source": "curl -X POST 'https://api.dfos.com/v1/spaces/home/posts/post_ze2kh2d47tzerkhet8348c/comments' \\\n  -H 'Authorization: DFOS <request-proof>' \\\n  -H 'X-Credential: <credential>' \\\n  -H 'Content-Type: application/json' \\\n  --data '{\n  \"body\": \"Same. That and origin binding running in both directions.\",\n  \"attachments\": [\n    \"media_2t9crk4hf7vz3ea8dn6r2c\"\n  ],\n  \"parentCommentId\": \"post_9rze4tk2vdc7fa38nhe6c2\"\n}'"
           }
         ]
       }
@@ -8279,7 +8342,7 @@
               "type": "string",
               "description": "Comment ID",
               "examples": [
-                "comment_d6ah3f9rkt2ez48vc7n4rc"
+                "post_d6ah3f9rkt2ez48vc7n4rc"
               ]
             }
           }
@@ -8354,6 +8417,9 @@
           "429": {
             "$ref": "#/components/responses/RateLimited"
           },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
           },
@@ -8377,12 +8443,12 @@
           {
             "lang": "curl",
             "label": "curl (identity proof)",
-            "source": "curl -X PATCH 'https://api.dfos.com/v1/spaces/home/comments/comment_d6ah3f9rkt2ez48vc7n4rc' \\\n  -H 'Authorization: DFOS <identity-proof>' \\\n  -H 'Content-Type: application/json' \\\n  --data '{\n  \"body\": \"Same. That and origin binding running in both directions.\"\n}'"
+            "source": "curl -X PATCH 'https://api.dfos.com/v1/spaces/home/comments/post_d6ah3f9rkt2ez48vc7n4rc' \\\n  -H 'Authorization: DFOS <identity-proof>' \\\n  -H 'Content-Type: application/json' \\\n  --data '{\n  \"body\": \"Same. That and origin binding running in both directions.\"\n}'"
           },
           {
             "lang": "curl",
             "label": "curl (delegated)",
-            "source": "curl -X PATCH 'https://api.dfos.com/v1/spaces/home/comments/comment_d6ah3f9rkt2ez48vc7n4rc' \\\n  -H 'Authorization: DFOS <request-proof>' \\\n  -H 'X-Credential: <credential>' \\\n  -H 'Content-Type: application/json' \\\n  --data '{\n  \"body\": \"Same. That and origin binding running in both directions.\"\n}'"
+            "source": "curl -X PATCH 'https://api.dfos.com/v1/spaces/home/comments/post_d6ah3f9rkt2ez48vc7n4rc' \\\n  -H 'Authorization: DFOS <request-proof>' \\\n  -H 'X-Credential: <credential>' \\\n  -H 'Content-Type: application/json' \\\n  --data '{\n  \"body\": \"Same. That and origin binding running in both directions.\"\n}'"
           }
         ]
       },
@@ -8416,7 +8482,7 @@
               "type": "string",
               "description": "Comment ID",
               "examples": [
-                "comment_d6ah3f9rkt2ez48vc7n4rc"
+                "post_d6ah3f9rkt2ez48vc7n4rc"
               ]
             }
           }
@@ -8456,6 +8522,9 @@
           "429": {
             "$ref": "#/components/responses/RateLimited"
           },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
           },
@@ -8479,12 +8548,12 @@
           {
             "lang": "curl",
             "label": "curl (identity proof)",
-            "source": "curl -X DELETE 'https://api.dfos.com/v1/spaces/home/comments/comment_d6ah3f9rkt2ez48vc7n4rc' \\\n  -H 'Authorization: DFOS <identity-proof>'"
+            "source": "curl -X DELETE 'https://api.dfos.com/v1/spaces/home/comments/post_d6ah3f9rkt2ez48vc7n4rc' \\\n  -H 'Authorization: DFOS <identity-proof>'"
           },
           {
             "lang": "curl",
             "label": "curl (delegated)",
-            "source": "curl -X DELETE 'https://api.dfos.com/v1/spaces/home/comments/comment_d6ah3f9rkt2ez48vc7n4rc' \\\n  -H 'Authorization: DFOS <request-proof>' \\\n  -H 'X-Credential: <credential>'"
+            "source": "curl -X DELETE 'https://api.dfos.com/v1/spaces/home/comments/post_d6ah3f9rkt2ez48vc7n4rc' \\\n  -H 'Authorization: DFOS <request-proof>' \\\n  -H 'X-Credential: <credential>'"
           }
         ]
       }
@@ -8520,7 +8589,7 @@
               "type": "string",
               "description": "Comment ID",
               "examples": [
-                "comment_9rze4tk2vdc7fa38nhe6c2"
+                "post_9rze4tk2vdc7fa38nhe6c2"
               ]
             }
           }
@@ -8560,6 +8629,9 @@
           "429": {
             "$ref": "#/components/responses/RateLimited"
           },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
           },
@@ -8583,12 +8655,12 @@
           {
             "lang": "curl",
             "label": "curl (identity proof)",
-            "source": "curl -X PUT 'https://api.dfos.com/v1/spaces/home/comments/comment_9rze4tk2vdc7fa38nhe6c2/upvote' \\\n  -H 'Authorization: DFOS <identity-proof>'"
+            "source": "curl -X PUT 'https://api.dfos.com/v1/spaces/home/comments/post_9rze4tk2vdc7fa38nhe6c2/upvote' \\\n  -H 'Authorization: DFOS <identity-proof>'"
           },
           {
             "lang": "curl",
             "label": "curl (delegated)",
-            "source": "curl -X PUT 'https://api.dfos.com/v1/spaces/home/comments/comment_9rze4tk2vdc7fa38nhe6c2/upvote' \\\n  -H 'Authorization: DFOS <request-proof>' \\\n  -H 'X-Credential: <credential>'"
+            "source": "curl -X PUT 'https://api.dfos.com/v1/spaces/home/comments/post_9rze4tk2vdc7fa38nhe6c2/upvote' \\\n  -H 'Authorization: DFOS <request-proof>' \\\n  -H 'X-Credential: <credential>'"
           }
         ]
       },
@@ -8622,7 +8694,7 @@
               "type": "string",
               "description": "Comment ID",
               "examples": [
-                "comment_9rze4tk2vdc7fa38nhe6c2"
+                "post_9rze4tk2vdc7fa38nhe6c2"
               ]
             }
           }
@@ -8662,6 +8734,9 @@
           "429": {
             "$ref": "#/components/responses/RateLimited"
           },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
           },
@@ -8685,12 +8760,12 @@
           {
             "lang": "curl",
             "label": "curl (identity proof)",
-            "source": "curl -X DELETE 'https://api.dfos.com/v1/spaces/home/comments/comment_9rze4tk2vdc7fa38nhe6c2/upvote' \\\n  -H 'Authorization: DFOS <identity-proof>'"
+            "source": "curl -X DELETE 'https://api.dfos.com/v1/spaces/home/comments/post_9rze4tk2vdc7fa38nhe6c2/upvote' \\\n  -H 'Authorization: DFOS <identity-proof>'"
           },
           {
             "lang": "curl",
             "label": "curl (delegated)",
-            "source": "curl -X DELETE 'https://api.dfos.com/v1/spaces/home/comments/comment_9rze4tk2vdc7fa38nhe6c2/upvote' \\\n  -H 'Authorization: DFOS <request-proof>' \\\n  -H 'X-Credential: <credential>'"
+            "source": "curl -X DELETE 'https://api.dfos.com/v1/spaces/home/comments/post_9rze4tk2vdc7fa38nhe6c2/upvote' \\\n  -H 'Authorization: DFOS <request-proof>' \\\n  -H 'X-Credential: <credential>'"
           }
         ]
       }
@@ -8806,6 +8881,9 @@
           "429": {
             "$ref": "#/components/responses/RateLimited"
           },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
           },
@@ -8887,6 +8965,9 @@
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
           "401": {
             "$ref": "#/components/responses/ProofRequired"
           },
@@ -8899,8 +8980,14 @@
           "413": {
             "$ref": "#/components/responses/PayloadTooLarge"
           },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
           "429": {
             "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -8998,8 +9085,26 @@
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/ProofRequired"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
           "429": {
             "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -9110,11 +9215,17 @@
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -9173,11 +9284,17 @@
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -9292,11 +9409,17 @@
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -9367,11 +9490,17 @@
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -9472,8 +9601,14 @@
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
           "429": {
             "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -9560,11 +9695,17 @@
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -9637,8 +9778,14 @@
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
           "429": {
             "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -9696,11 +9843,17 @@
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -9787,11 +9940,17 @@
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -9864,8 +10023,14 @@
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
           "429": {
             "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -9923,11 +10088,17 @@
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -10014,11 +10185,17 @@
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -10076,11 +10253,17 @@
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -10126,11 +10309,17 @@
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -10203,8 +10392,14 @@
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
           "429": {
             "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -10291,11 +10486,17 @@
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -10400,6 +10601,9 @@
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
           "401": {
             "$ref": "#/components/responses/ProofRequired"
           },
@@ -10409,8 +10613,14 @@
           "413": {
             "$ref": "#/components/responses/PayloadTooLarge"
           },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
           "429": {
             "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -10543,6 +10753,9 @@
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
           "401": {
             "$ref": "#/components/responses/ProofRequired"
           },
@@ -10552,8 +10765,14 @@
           "413": {
             "$ref": "#/components/responses/PayloadTooLarge"
           },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
           "429": {
             "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -10623,6 +10842,9 @@
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
           "401": {
             "$ref": "#/components/responses/ProofRequired"
           },
@@ -10635,8 +10857,14 @@
           "413": {
             "$ref": "#/components/responses/PayloadTooLarge"
           },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
           "429": {
             "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -10783,6 +11011,9 @@
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
           "401": {
             "$ref": "#/components/responses/ProofRequired"
           },
@@ -10792,8 +11023,14 @@
           "413": {
             "$ref": "#/components/responses/PayloadTooLarge"
           },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
           "429": {
             "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -10862,6 +11099,9 @@
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
           "401": {
             "$ref": "#/components/responses/ProofRequired"
           },
@@ -10874,8 +11114,14 @@
           "413": {
             "$ref": "#/components/responses/PayloadTooLarge"
           },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
           "429": {
             "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -10930,6 +11176,9 @@
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
           "401": {
             "$ref": "#/components/responses/ProofRequired"
           },
@@ -10939,8 +11188,14 @@
           "413": {
             "$ref": "#/components/responses/PayloadTooLarge"
           },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
           "429": {
             "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -11108,6 +11363,9 @@
           "429": {
             "$ref": "#/components/responses/RateLimited"
           },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
           },
@@ -11223,6 +11481,9 @@
           "429": {
             "$ref": "#/components/responses/RateLimited"
           },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
           },
@@ -11253,6 +11514,9 @@
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
