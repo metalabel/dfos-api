@@ -52,7 +52,7 @@
       "esbuild"
     ],
     "overrides": {
-      "@types/node": "24.13.5"
+      "@types/node": "24.13.6"
     }
   },
   "dependencies": {
@@ -63,13 +63,13 @@
     "@metalabel/dfos-client": "0.54.0",
     "@metalabel/dfos-protocol": "0.54.0",
     "@metalabel/dfos-web-relay": "0.54.0",
-    "@types/node": "^24.13.5",
+    "@types/node": "^24.13.6",
     "openapi-typescript": "^7.10.0",
-    "prettier": "^3.9.8",
+    "prettier": "^3.9.9",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3",
     "typescript7": "npm:typescript@7.0.2",
-    "vite": "^8.3.0",
-    "vitest": "^5.0.1"
+    "vite": "^8.3.2",
+    "vitest": "^5.0.3"
   }
 }
