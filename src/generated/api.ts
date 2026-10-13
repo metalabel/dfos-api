@@ -428,66 +428,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/spaces/{space}/releases": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List a space public releases
-         * @description A space's published public releases, newest-published first. Returns 404 when the space has no public profile.
-         */
-        get: operations["releases.listSpaceReleases"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/releases": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List public releases across all spaces
-         * @description Releases with a public page across every publicly-discoverable space, newest-published first. Each item is the space-shelf summary plus its `space`. A space absent from `GET /spaces` is absent here even though its own release routes still serve it.
-         */
-        get: operations["releases.listReleases"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/spaces/{space}/releases/{slug}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get a public release
-         * @description Fetch a release's public page by its slug: media wall, credits, composed products, events. Returns 404 when nothing publicly visible matches.
-         */
-        get: operations["releases.getSpaceRelease"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/spaces/{space}/topics": {
         parameters: {
             query?: never;
@@ -1521,7 +1461,7 @@ export interface components {
          */
         FeedSpaceRefOutput: {
             /**
-             * @description The space's stable entity id. Pass it back as `{space}` on the credential-aware space routes — posts, comments, and media: with a credential that covers the space (or a bare identity proof) and live membership, a private space resolves there too. The anonymous routes (`GET /spaces/{space}`, pages, topics, events, products, releases) still need a public profile.
+             * @description The space's stable entity id. Pass it back as `{space}` on the credential-aware space routes — posts, comments, and media: with a credential that covers the space (or a bare identity proof) and live membership, a private space resolves there too. The anonymous routes (`GET /spaces/{space}`, pages, topics, events, products) still need a public profile.
              * @example space_vnzfk7hth9vadc3daahd48
              */
             id: string;
@@ -2325,25 +2265,13 @@ export interface components {
             totalCount?: number | null;
         };
         /**
-         * @description The release a product belongs to
-         * @example {
-         *       "slug": "the-dark-forest-anthology-of-the-internet",
-         *       "name": "The Dark Forest Anthology of the Internet"
-         *     }
-         */
-        PublicProductReleaseRefOutput: {
-            /** @description The release's public page slug. Pass it to `GET /spaces/{space}/releases/{slug}`. */
-            slug: string;
-            /** @description Release name */
-            name: string;
-        };
-        /**
          * @description A store product with a public purchase page
          * @example {
          *       "id": "sprod_ra73keekz9f22k7889ren7",
          *       "slug": "the-dark-forest-anthology-of-the-internet-digital",
          *       "name": "The Dark Forest Anthology of the Internet (digital)",
          *       "description": "A book about how to survive on the internet. It’s about the cozy web, the dark web, the dark forest, the clear net, the dark net, and a new social world emerging around us. This is the Dark Forest Anthology of the Internet.",
+         *       "learnMoreUrl": "https://home.dfos.com/post/dfos-beyond-dfos-sign-in-domains-and-your-own-keys-ze2kh2d47tzerkhet8348c",
          *       "kind": "digital",
          *       "image": {
          *         "id": "media_a9e9r767ca9frz7dvrfvna",
@@ -2368,10 +2296,6 @@ export interface components {
          *       "isSoldOut": false,
          *       "purchasable": true,
          *       "sortOrder": 0,
-         *       "release": {
-         *         "slug": "the-dark-forest-anthology-of-the-internet",
-         *         "name": "The Dark Forest Anthology of the Internet"
-         *       },
          *       "createdAt": "2026-08-08T13:24:36.433Z"
          *     }
          */
@@ -2387,6 +2311,12 @@ export interface components {
             name: string;
             /** @description Plain-text description. Newlines are significant. */
             description: string | null;
+            /**
+             * Format: uri
+             * @description Seller-authored "learn more" link shown beside the description before purchase. Treat it as untrusted. Absent when the seller set none.
+             * @example https://home.dfos.com/post/dfos-beyond-dfos-sign-in-domains-and-your-own-keys-ze2kh2d47tzerkhet8348c
+             */
+            learnMoreUrl?: string;
             /**
              * @description What the product delivers. Open enum.
              * @enum {string}
@@ -2404,7 +2334,7 @@ export interface components {
             isSoldOut: boolean;
             /** @description Whether a purchase can be started right now. False when the payment rail is paused or no price tier is completable. */
             purchasable: boolean;
-            /** @description Position in the space's public product list, from 0, lowest first. Dense over publicly-visible products only, and not a stable key. */
+            /** @description Position in the space's public product list, from 0, lowest first. Dense over the space's listed products only; a product reachable by link but left out of the list reports the position it would take, which can equal a neighbor's. Not unique and not a stable key. */
             sortOrder: number;
             /** @description The soonest upcoming public event occurrence this product admits. A product may admit several; read the events namespace for the full relation. Absent when the product is not a ticket, its binding is detached, the event is not public, or no occurrence falls in the coming year. */
             ticketFor?: {
@@ -2417,8 +2347,6 @@ export interface components {
                 /** @description All-day only: the occurrence's start date (`YYYY-MM-DD`). Null for a timed event. */
                 startDate: string | null;
             };
-            /** @description The release this product belongs to, when a public one holds it. A product in several releases carries the earliest-published public one. */
-            release?: components["schemas"]["PublicProductReleaseRefOutput"];
             /**
              * Format: date-time
              * @description When the product was created (ISO 8601 UTC). `GET /products` orders by this value, newest first.
@@ -2434,6 +2362,7 @@ export interface components {
          *           "slug": "the-dark-forest-anthology-of-the-internet-digital",
          *           "name": "The Dark Forest Anthology of the Internet (digital)",
          *           "description": "A book about how to survive on the internet. It’s about the cozy web, the dark web, the dark forest, the clear net, the dark net, and a new social world emerging around us. This is the Dark Forest Anthology of the Internet.",
+         *           "learnMoreUrl": "https://home.dfos.com/post/dfos-beyond-dfos-sign-in-domains-and-your-own-keys-ze2kh2d47tzerkhet8348c",
          *           "kind": "digital",
          *           "image": {
          *             "id": "media_a9e9r767ca9frz7dvrfvna",
@@ -2458,10 +2387,6 @@ export interface components {
          *           "isSoldOut": false,
          *           "purchasable": true,
          *           "sortOrder": 0,
-         *           "release": {
-         *             "slug": "the-dark-forest-anthology-of-the-internet",
-         *             "name": "The Dark Forest Anthology of the Internet"
-         *           },
          *           "createdAt": "2026-08-08T13:24:36.433Z"
          *         }
          *       ],
@@ -2487,6 +2412,7 @@ export interface components {
          *       "slug": "the-dark-forest-anthology-of-the-internet-digital",
          *       "name": "The Dark Forest Anthology of the Internet (digital)",
          *       "description": "A book about how to survive on the internet. It’s about the cozy web, the dark web, the dark forest, the clear net, the dark net, and a new social world emerging around us. This is the Dark Forest Anthology of the Internet.",
+         *       "learnMoreUrl": "https://home.dfos.com/post/dfos-beyond-dfos-sign-in-domains-and-your-own-keys-ze2kh2d47tzerkhet8348c",
          *       "kind": "digital",
          *       "image": {
          *         "id": "media_a9e9r767ca9frz7dvrfvna",
@@ -2511,10 +2437,6 @@ export interface components {
          *       "isSoldOut": false,
          *       "purchasable": true,
          *       "sortOrder": 0,
-         *       "release": {
-         *         "slug": "the-dark-forest-anthology-of-the-internet",
-         *         "name": "The Dark Forest Anthology of the Internet"
-         *       },
          *       "createdAt": "2026-08-08T13:24:36.433Z",
          *       "space": {
          *         "id": "space_vnzfk7hth9vadc3daahd48",
@@ -2538,6 +2460,12 @@ export interface components {
             /** @description Plain-text description. Newlines are significant. */
             description: string | null;
             /**
+             * Format: uri
+             * @description Seller-authored "learn more" link shown beside the description before purchase. Treat it as untrusted. Absent when the seller set none.
+             * @example https://home.dfos.com/post/dfos-beyond-dfos-sign-in-domains-and-your-own-keys-ze2kh2d47tzerkhet8348c
+             */
+            learnMoreUrl?: string;
+            /**
              * @description What the product delivers. Open enum.
              * @enum {string}
              */
@@ -2554,7 +2482,7 @@ export interface components {
             isSoldOut: boolean;
             /** @description Whether a purchase can be started right now. False when the payment rail is paused or no price tier is completable. */
             purchasable: boolean;
-            /** @description Position in the space's public product list, from 0, lowest first. Dense over publicly-visible products only, and not a stable key. */
+            /** @description Position in the space's public product list, from 0, lowest first. Dense over the space's listed products only; a product reachable by link but left out of the list reports the position it would take, which can equal a neighbor's. Not unique and not a stable key. */
             sortOrder: number;
             /** @description The soonest upcoming public event occurrence this product admits. A product may admit several; read the events namespace for the full relation. Absent when the product is not a ticket, its binding is detached, the event is not public, or no occurrence falls in the coming year. */
             ticketFor?: {
@@ -2567,8 +2495,6 @@ export interface components {
                 /** @description All-day only: the occurrence's start date (`YYYY-MM-DD`). Null for a timed event. */
                 startDate: string | null;
             };
-            /** @description The release this product belongs to, when a public one holds it. A product in several releases carries the earliest-published public one. */
-            release?: components["schemas"]["PublicProductReleaseRefOutput"];
             /**
              * Format: date-time
              * @description When the product was created (ISO 8601 UTC). `GET /products` orders by this value, newest first.
@@ -2585,6 +2511,7 @@ export interface components {
          *           "slug": "the-dark-forest-anthology-of-the-internet-digital",
          *           "name": "The Dark Forest Anthology of the Internet (digital)",
          *           "description": "A book about how to survive on the internet. It’s about the cozy web, the dark web, the dark forest, the clear net, the dark net, and a new social world emerging around us. This is the Dark Forest Anthology of the Internet.",
+         *           "learnMoreUrl": "https://home.dfos.com/post/dfos-beyond-dfos-sign-in-domains-and-your-own-keys-ze2kh2d47tzerkhet8348c",
          *           "kind": "digital",
          *           "image": {
          *             "id": "media_a9e9r767ca9frz7dvrfvna",
@@ -2609,10 +2536,6 @@ export interface components {
          *           "isSoldOut": false,
          *           "purchasable": true,
          *           "sortOrder": 0,
-         *           "release": {
-         *             "slug": "the-dark-forest-anthology-of-the-internet",
-         *             "name": "The Dark Forest Anthology of the Internet"
-         *           },
          *           "createdAt": "2026-08-08T13:24:36.433Z",
          *           "space": {
          *             "id": "space_vnzfk7hth9vadc3daahd48",
@@ -2630,497 +2553,6 @@ export interface components {
         PublicProductFeedPageOutput: {
             /** @description Page of public products across every publicly-discoverable space */
             items: components["schemas"]["PublicProductFeedItemOutput"][];
-            /** @description Cursor for the next page, or null at the end. Pass back verbatim as `after`. */
-            nextCursor: string | null;
-            /** @description Cursor for the previous page, or null at the start. Pass back verbatim as `before`. Omitted where backward paging is unsupported. */
-            previousCursor?: string | null;
-            /** @description Total matching items, or null when not computed. May be omitted; do not depend on its presence. */
-            totalCount?: number | null;
-        };
-        /**
-         * @description Where the release is in time: `upcoming` before `releasesAt`, `live` once out, `ended` past `closesAt`. Open enum.
-         * @enum {string}
-         */
-        PublicReleaseState: "upcoming" | "live" | "ended";
-        /**
-         * @description A credit on a release
-         * @example {
-         *       "id": "relcred_aha44ncvfnfk8t23ct3v7r",
-         *       "displayName": "Yancey",
-         *       "role": "editor"
-         *     }
-         */
-        PublicReleaseCreditOutput: {
-            /** @description Stable credit id. */
-            id: string;
-            /** @description The credited name. */
-            displayName: string;
-            /** @description The credit role, free text ("mastering"). Null when unset. */
-            role: string | null;
-        };
-        /**
-         * @description An entry on a release media wall
-         * @example {
-         *       "id": "relmed_h4zdvrtz9nr73nc7v3n99e",
-         *       "caption": null,
-         *       "media": {
-         *         "id": "media_9tnfvccf6t372vdnv43ftv",
-         *         "filename": "dfos.png",
-         *         "url": "https://dfos.imgix.net/media/public/9tnfvccf6t372vdnv43ftv-dfos.png",
-         *         "contentType": "image/png",
-         *         "contentLength": 7045192,
-         *         "width": 2729,
-         *         "height": 2129,
-         *         "blurHash": "eIHLC@.7~q%MM|?bsmS5xu%MMwS24TE1oz.8xat7W=M{%Naxt7j]RP"
-         *       }
-         *     }
-         */
-        PublicReleaseMediaOutput: {
-            /** @description Stable wall-entry id (not `media.id`). */
-            id: string;
-            /** @description Caption for this entry, when there is one. */
-            caption: string | null;
-            /**
-             * @description The asset. Always a permanent public CDN URL.
-             * @example {
-             *       "id": "media_efrvdarnc6zd3nhv389cf2",
-             *       "filename": "p04.jpg",
-             *       "url": "https://dfos.imgix.net/media/public/efrvdarnc6zd3nhv389cf2-p04.jpg",
-             *       "contentType": "image/jpeg",
-             *       "contentLength": 2890442,
-             *       "width": 2752,
-             *       "height": 1536,
-             *       "blurHash": "eJ7ekWt%8{RQ.7tQoyWBfRoy8yVu?atQIBM{WBt7j[Rj%Lf8MyV[s;"
-             *     }
-             */
-            media: {
-                /** @description Media object id — what an `attachment://<id>` inline body token references. Use it to match a token to its `bodyMedia` entry. */
-                id: string;
-                /** @description Original uploaded filename */
-                filename: string;
-                /** @description Resolved URL for the media object. Permanent for public images; a time-limited signed URL for private media, which carries `urlExpiresAt`. */
-                url: string;
-                /** @description MIME type of the media object */
-                contentType: string;
-                /** @description Size in bytes, absent until the upload is finalized */
-                contentLength?: number;
-                /** @description Pixel width (images/video) */
-                width?: number;
-                /** @description Pixel height (images/video) */
-                height?: number;
-                /** @description Blur-hash placeholder string for progressive image loading */
-                blurHash?: string;
-                /** @description Uploader-authored caption or alt text */
-                alt?: string;
-                /** @description Playback length in milliseconds (audio/video only) */
-                durationMs?: number;
-                /** @description CDN URL of an extracted poster frame or cover art (audio/video only) */
-                posterUrl?: string;
-                /** @description Streamable MP4 rendition URL (audio/video only). Permanent for public media; a time-limited signed URL for private media. */
-                playbackUrl?: string;
-                /**
-                 * Format: date-time
-                 * @description When the signed `url` and `playbackUrl` expire (ISO 8601 UTC). Present only for private media. Signed URLs are ephemeral — re-fetch rather than persisting them.
-                 */
-                urlExpiresAt?: string;
-                /** @description Amplitude overview for audio — up to 200 integers, each 0–100 */
-                waveformPeaks?: number[];
-            };
-        };
-        /**
-         * @description A public event a release points at. Address it in the events namespace as `(seriesId, recurrenceId)`.
-         * @example {
-         *       "seriesId": "evt_ehrrkh8thkkdh6c383zkf9",
-         *       "recurrenceId": "2026-09-09",
-         *       "title": "DFOS product weekly",
-         *       "isAllDay": true,
-         *       "timeZone": null,
-         *       "startsAt": null,
-         *       "startDate": "2026-09-09"
-         *     }
-         */
-        PublicReleaseEventOutput: {
-            /** @description The event series id. */
-            seriesId: string;
-            /** @description RFC 5545 RECURRENCE-ID of the occurrence: local wall-time (`YYYY-MM-DDTHH:MM:SS`), or a date (`YYYY-MM-DD`) when all-day. */
-            recurrenceId: string;
-            /** @description Event title */
-            title: string;
-            /** @description True for a date-based occurrence: `startDate` is set, `startsAt` is null. */
-            isAllDay: boolean;
-            /**
-             * @description Timed only: the IANA zone `recurrenceId` is expressed in. Null for an all-day event.
-             * @example America/New_York
-             */
-            timeZone: string | null;
-            /** @description The occurrence's start instant (ISO 8601 UTC). Null for an all-day event. */
-            startsAt: string | null;
-            /** @description All-day only: the occurrence's start date (`YYYY-MM-DD`). Null for a timed event. */
-            startDate: string | null;
-        };
-        /**
-         * @description A release in a space's public shelf
-         * @example {
-         *       "id": "rel_vdeaff8zac8cr49fa624dh",
-         *       "slug": "the-dark-forest-anthology-of-the-internet",
-         *       "name": "The Dark Forest Anthology of the Internet",
-         *       "state": "live",
-         *       "shortDescription": "The digital edition, readable anywhere, out now.",
-         *       "cover": {
-         *         "id": "media_a9e9r767ca9frz7dvrfvna",
-         *         "filename": "GpE09OWasAAw1BX.jpeg",
-         *         "url": "https://dfos.imgix.net/media/public/a9e9r767ca9frz7dvrfvna-gpe09owasaaw1bx.jpeg",
-         *         "contentType": "image/jpeg",
-         *         "contentLength": 2468014,
-         *         "width": 3200,
-         *         "height": 3200,
-         *         "blurHash": "e$P43Mxs|Fw]K4r^oeaLaeba,;n*JTf6snr?j?kCoLayv~f6OEj]n%"
-         *       },
-         *       "catalogNumber": null,
-         *       "location": null,
-         *       "publishedAt": "2026-08-08T13:24:36.433Z",
-         *       "releasesAt": "2026-08-08T13:24:36.433Z",
-         *       "closesAt": null,
-         *       "productCount": 1
-         *     }
-         */
-        PublicReleaseSummaryOutput: {
-            /** @description Stable release id. */
-            id: string;
-            /**
-             * @description The release's public page slug (`/r/{slug}` on the space site). A mutable alias; `id` is canonical.
-             * @example the-dark-forest-anthology-of-the-internet
-             */
-            slug: string;
-            /** @description Release name */
-            name: string;
-            state: components["schemas"]["PublicReleaseState"];
-            /** @description One-line blurb. */
-            shortDescription: string | null;
-            /** @description Cover image, when the release has one. Always a permanent public CDN URL. */
-            cover?: components["schemas"]["PublicMediaOutput"];
-            /**
-             * @description The space's own catalog expression. Free text, not unique, never a key.
-             * @example MTL-001
-             */
-            catalogNumber: string | null;
-            /**
-             * @description Freeform place string. Never geocoded, never a key.
-             * @example Austin, TX
-             */
-            location: string | null;
-            /**
-             * Format: date-time
-             * @description When this release was published (ISO 8601 UTC). Release lists order by this value, newest first.
-             */
-            publishedAt: string;
-            /** @description When the release opens (ISO 8601 UTC). Before it, `state` is `upcoming`. Null when no opening date is set. */
-            releasesAt: string | null;
-            /**
-             * @description When the release closes (ISO 8601 UTC). Past it, `state` is `ended` and the page stays readable. Null when no closing date is set.
-             * @example 2026-10-12T17:00:00.000Z
-             */
-            closesAt: string | null;
-            /** @description How many of the composed products are publicly purchasable. */
-            productCount: number;
-        };
-        /**
-         * @description A release public page
-         * @example {
-         *       "id": "rel_vdeaff8zac8cr49fa624dh",
-         *       "slug": "the-dark-forest-anthology-of-the-internet",
-         *       "name": "The Dark Forest Anthology of the Internet",
-         *       "state": "live",
-         *       "shortDescription": "The digital edition, readable anywhere, out now.",
-         *       "cover": {
-         *         "id": "media_a9e9r767ca9frz7dvrfvna",
-         *         "filename": "GpE09OWasAAw1BX.jpeg",
-         *         "url": "https://dfos.imgix.net/media/public/a9e9r767ca9frz7dvrfvna-gpe09owasaaw1bx.jpeg",
-         *         "contentType": "image/jpeg",
-         *         "contentLength": 2468014,
-         *         "width": 3200,
-         *         "height": 3200,
-         *         "blurHash": "e$P43Mxs|Fw]K4r^oeaLaeba,;n*JTf6snr?j?kCoLayv~f6OEj]n%"
-         *       },
-         *       "catalogNumber": null,
-         *       "location": null,
-         *       "publishedAt": "2026-08-08T13:24:36.433Z",
-         *       "releasesAt": "2026-08-08T13:24:36.433Z",
-         *       "closesAt": null,
-         *       "productCount": 1,
-         *       "longDescription": "A book about how to survive on the internet. It’s about the cozy web, the dark web, the dark forest, the clear net, the dark net, and a new social world emerging around us. This is the Dark Forest Anthology of the Internet.",
-         *       "media": [
-         *         {
-         *           "id": "relmed_h4zdvrtz9nr73nc7v3n99e",
-         *           "caption": null,
-         *           "media": {
-         *             "id": "media_9tnfvccf6t372vdnv43ftv",
-         *             "filename": "dfos.png",
-         *             "url": "https://dfos.imgix.net/media/public/9tnfvccf6t372vdnv43ftv-dfos.png",
-         *             "contentType": "image/png",
-         *             "contentLength": 7045192,
-         *             "width": 2729,
-         *             "height": 2129,
-         *             "blurHash": "eIHLC@.7~q%MM|?bsmS5xu%MMwS24TE1oz.8xat7W=M{%Naxt7j]RP"
-         *           }
-         *         }
-         *       ],
-         *       "credits": [
-         *         {
-         *           "id": "relcred_aha44ncvfnfk8t23ct3v7r",
-         *           "displayName": "Yancey",
-         *           "role": "editor"
-         *         }
-         *       ],
-         *       "products": [
-         *         {
-         *           "id": "sprod_ra73keekz9f22k7889ren7",
-         *           "slug": "the-dark-forest-anthology-of-the-internet-digital",
-         *           "name": "The Dark Forest Anthology of the Internet (digital)",
-         *           "description": "A book about how to survive on the internet. It’s about the cozy web, the dark web, the dark forest, the clear net, the dark net, and a new social world emerging around us. This is the Dark Forest Anthology of the Internet.",
-         *           "kind": "digital",
-         *           "image": {
-         *             "id": "media_a9e9r767ca9frz7dvrfvna",
-         *             "filename": "GpE09OWasAAw1BX.jpeg",
-         *             "url": "https://dfos.imgix.net/media/public/a9e9r767ca9frz7dvrfvna-gpe09owasaaw1bx.jpeg",
-         *             "contentType": "image/jpeg",
-         *             "contentLength": 2468014,
-         *             "width": 3200,
-         *             "height": 3200,
-         *             "blurHash": "e$P43Mxs|Fw]K4r^oeaLaeba,;n*JTf6snr?j?kCoLayv~f6OEj]n%"
-         *           },
-         *           "prices": [
-         *             {
-         *               "id": "pprice_97hfv7rcea93267z8t677d",
-         *               "type": "one_time",
-         *               "amountCents": 1000,
-         *               "currency": "usd"
-         *             }
-         *           ],
-         *           "purchaseGrantsMembership": true,
-         *           "available": null,
-         *           "isSoldOut": false,
-         *           "purchasable": true,
-         *           "sortOrder": 0,
-         *           "release": {
-         *             "slug": "the-dark-forest-anthology-of-the-internet",
-         *             "name": "The Dark Forest Anthology of the Internet"
-         *           },
-         *           "createdAt": "2026-08-08T13:24:36.433Z"
-         *         }
-         *       ],
-         *       "events": []
-         *     }
-         */
-        PublicReleaseOutput: {
-            /** @description Stable release id. */
-            id: string;
-            /**
-             * @description The release's public page slug (`/r/{slug}` on the space site). A mutable alias; `id` is canonical.
-             * @example the-dark-forest-anthology-of-the-internet
-             */
-            slug: string;
-            /** @description Release name */
-            name: string;
-            state: components["schemas"]["PublicReleaseState"];
-            /** @description One-line blurb. */
-            shortDescription: string | null;
-            /** @description Cover image, when the release has one. Always a permanent public CDN URL. */
-            cover?: components["schemas"]["PublicMediaOutput"];
-            /**
-             * @description The space's own catalog expression. Free text, not unique, never a key.
-             * @example MTL-001
-             */
-            catalogNumber: string | null;
-            /**
-             * @description Freeform place string. Never geocoded, never a key.
-             * @example Austin, TX
-             */
-            location: string | null;
-            /**
-             * Format: date-time
-             * @description When this release was published (ISO 8601 UTC). Release lists order by this value, newest first.
-             */
-            publishedAt: string;
-            /** @description When the release opens (ISO 8601 UTC). Before it, `state` is `upcoming`. Null when no opening date is set. */
-            releasesAt: string | null;
-            /**
-             * @description When the release closes (ISO 8601 UTC). Past it, `state` is `ended` and the page stays readable. Null when no closing date is set.
-             * @example 2026-10-12T17:00:00.000Z
-             */
-            closesAt: string | null;
-            /** @description How many of the composed products are publicly purchasable. */
-            productCount: number;
-            /** @description Long-form release copy. Newlines are significant. */
-            longDescription: string | null;
-            /** @description The media wall, in wall order. Entries backed by private media are omitted. */
-            media: components["schemas"]["PublicReleaseMediaOutput"][];
-            /** @description Credits, in credit order. A name and an optional role. */
-            credits: components["schemas"]["PublicReleaseCreditOutput"][];
-            /** @description The composed products, in the release's curated order. Products with no public page are absent and uncounted. */
-            products: components["schemas"]["PublicProductOutput"][];
-            /** @description Public events attached to this release, soonest first. Events an anonymous caller may not see are absent. */
-            events: components["schemas"]["PublicReleaseEventOutput"][];
-        };
-        /**
-         * @description A page of public releases
-         * @example {
-         *       "items": [
-         *         {
-         *           "id": "rel_vdeaff8zac8cr49fa624dh",
-         *           "slug": "the-dark-forest-anthology-of-the-internet",
-         *           "name": "The Dark Forest Anthology of the Internet",
-         *           "state": "live",
-         *           "shortDescription": "The digital edition, readable anywhere, out now.",
-         *           "cover": {
-         *             "id": "media_a9e9r767ca9frz7dvrfvna",
-         *             "filename": "GpE09OWasAAw1BX.jpeg",
-         *             "url": "https://dfos.imgix.net/media/public/a9e9r767ca9frz7dvrfvna-gpe09owasaaw1bx.jpeg",
-         *             "contentType": "image/jpeg",
-         *             "contentLength": 2468014,
-         *             "width": 3200,
-         *             "height": 3200,
-         *             "blurHash": "e$P43Mxs|Fw]K4r^oeaLaeba,;n*JTf6snr?j?kCoLayv~f6OEj]n%"
-         *           },
-         *           "catalogNumber": null,
-         *           "location": null,
-         *           "publishedAt": "2026-08-08T13:24:36.433Z",
-         *           "releasesAt": "2026-08-08T13:24:36.433Z",
-         *           "closesAt": null,
-         *           "productCount": 1
-         *         }
-         *       ],
-         *       "nextCursor": null,
-         *       "previousCursor": null,
-         *       "totalCount": 1
-         *     }
-         */
-        PublicReleasePageOutput: {
-            /** @description Page of public releases */
-            items: components["schemas"]["PublicReleaseSummaryOutput"][];
-            /** @description Cursor for the next page, or null at the end. Pass back verbatim as `after`. */
-            nextCursor: string | null;
-            /** @description Cursor for the previous page, or null at the start. Pass back verbatim as `before`. Omitted where backward paging is unsupported. */
-            previousCursor?: string | null;
-            /** @description Total matching items, or null when not computed. May be omitted; do not depend on its presence. */
-            totalCount?: number | null;
-        };
-        /**
-         * @description A public release with the space it belongs to
-         * @example {
-         *       "id": "rel_vdeaff8zac8cr49fa624dh",
-         *       "slug": "the-dark-forest-anthology-of-the-internet",
-         *       "name": "The Dark Forest Anthology of the Internet",
-         *       "state": "live",
-         *       "shortDescription": "The digital edition, readable anywhere, out now.",
-         *       "cover": {
-         *         "id": "media_a9e9r767ca9frz7dvrfvna",
-         *         "filename": "GpE09OWasAAw1BX.jpeg",
-         *         "url": "https://dfos.imgix.net/media/public/a9e9r767ca9frz7dvrfvna-gpe09owasaaw1bx.jpeg",
-         *         "contentType": "image/jpeg",
-         *         "contentLength": 2468014,
-         *         "width": 3200,
-         *         "height": 3200,
-         *         "blurHash": "e$P43Mxs|Fw]K4r^oeaLaeba,;n*JTf6snr?j?kCoLayv~f6OEj]n%"
-         *       },
-         *       "catalogNumber": null,
-         *       "location": null,
-         *       "publishedAt": "2026-08-08T13:24:36.433Z",
-         *       "releasesAt": "2026-08-08T13:24:36.433Z",
-         *       "closesAt": null,
-         *       "productCount": 1,
-         *       "space": {
-         *         "id": "space_vnzfk7hth9vadc3daahd48",
-         *         "did": "did:dfos:9ctvrdn9vedda7efetrhcdakfh4cr2k",
-         *         "domain": "home",
-         *         "displayName": "DFOS",
-         *         "avatarUrl": "https://dfos.imgix.net/media/public/8e87h8c37f2vz3v6h7h3at-frame-143726546.png"
-         *       }
-         *     }
-         */
-        PublicReleaseFeedItemOutput: {
-            /** @description Stable release id. */
-            id: string;
-            /**
-             * @description The release's public page slug (`/r/{slug}` on the space site). A mutable alias; `id` is canonical.
-             * @example the-dark-forest-anthology-of-the-internet
-             */
-            slug: string;
-            /** @description Release name */
-            name: string;
-            state: components["schemas"]["PublicReleaseState"];
-            /** @description One-line blurb. */
-            shortDescription: string | null;
-            /** @description Cover image, when the release has one. Always a permanent public CDN URL. */
-            cover?: components["schemas"]["PublicMediaOutput"];
-            /**
-             * @description The space's own catalog expression. Free text, not unique, never a key.
-             * @example MTL-001
-             */
-            catalogNumber: string | null;
-            /**
-             * @description Freeform place string. Never geocoded, never a key.
-             * @example Austin, TX
-             */
-            location: string | null;
-            /**
-             * Format: date-time
-             * @description When this release was published (ISO 8601 UTC). Release lists order by this value, newest first.
-             */
-            publishedAt: string;
-            /** @description When the release opens (ISO 8601 UTC). Before it, `state` is `upcoming`. Null when no opening date is set. */
-            releasesAt: string | null;
-            /**
-             * @description When the release closes (ISO 8601 UTC). Past it, `state` is `ended` and the page stays readable. Null when no closing date is set.
-             * @example 2026-10-12T17:00:00.000Z
-             */
-            closesAt: string | null;
-            /** @description How many of the composed products are publicly purchasable. */
-            productCount: number;
-            space: components["schemas"]["PublicSpaceRefOutput"];
-        };
-        /**
-         * @description A page of cross-space public releases
-         * @example {
-         *       "items": [
-         *         {
-         *           "id": "rel_vdeaff8zac8cr49fa624dh",
-         *           "slug": "the-dark-forest-anthology-of-the-internet",
-         *           "name": "The Dark Forest Anthology of the Internet",
-         *           "state": "live",
-         *           "shortDescription": "The digital edition, readable anywhere, out now.",
-         *           "cover": {
-         *             "id": "media_a9e9r767ca9frz7dvrfvna",
-         *             "filename": "GpE09OWasAAw1BX.jpeg",
-         *             "url": "https://dfos.imgix.net/media/public/a9e9r767ca9frz7dvrfvna-gpe09owasaaw1bx.jpeg",
-         *             "contentType": "image/jpeg",
-         *             "contentLength": 2468014,
-         *             "width": 3200,
-         *             "height": 3200,
-         *             "blurHash": "e$P43Mxs|Fw]K4r^oeaLaeba,;n*JTf6snr?j?kCoLayv~f6OEj]n%"
-         *           },
-         *           "catalogNumber": null,
-         *           "location": null,
-         *           "publishedAt": "2026-08-08T13:24:36.433Z",
-         *           "releasesAt": "2026-08-08T13:24:36.433Z",
-         *           "closesAt": null,
-         *           "productCount": 1,
-         *           "space": {
-         *             "id": "space_vnzfk7hth9vadc3daahd48",
-         *             "did": "did:dfos:9ctvrdn9vedda7efetrhcdakfh4cr2k",
-         *             "domain": "home",
-         *             "displayName": "DFOS",
-         *             "avatarUrl": "https://dfos.imgix.net/media/public/8e87h8c37f2vz3v6h7h3at-frame-143726546.png"
-         *           }
-         *         }
-         *       ],
-         *       "nextCursor": "eyJpZCI6InBvc3RfemUya2gyZDQ3dHplcmtoZXQ4MzQ4YyJ9",
-         *       "previousCursor": null
-         *     }
-         */
-        PublicReleaseFeedPageOutput: {
-            /** @description Page of public releases across every publicly-discoverable space */
-            items: components["schemas"]["PublicReleaseFeedItemOutput"][];
             /** @description Cursor for the next page, or null at the end. Pass back verbatim as `after`. */
             nextCursor: string | null;
             /** @description Cursor for the previous page, or null at the start. Pass back verbatim as `before`. Omitted where backward paging is unsupported. */
@@ -5166,96 +4598,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PublicProductOutput"];
-                };
-            };
-            400: components["responses"]["InvalidRequest"];
-            404: components["responses"]["NotFound"];
-            429: components["responses"]["RateLimited"];
-            500: components["responses"]["InternalError"];
-            503: components["responses"]["ServiceUnavailable"];
-            default: components["responses"]["Error"];
-        };
-    };
-    "releases.listSpaceReleases": {
-        parameters: {
-            query?: {
-                limit?: number;
-                after?: string;
-                before?: string;
-            };
-            header?: never;
-            path: {
-                space: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PublicReleasePageOutput"];
-                };
-            };
-            400: components["responses"]["InvalidRequest"];
-            404: components["responses"]["NotFound"];
-            429: components["responses"]["RateLimited"];
-            500: components["responses"]["InternalError"];
-            503: components["responses"]["ServiceUnavailable"];
-            default: components["responses"]["Error"];
-        };
-    };
-    "releases.listReleases": {
-        parameters: {
-            query?: {
-                limit?: number;
-                after?: string;
-                before?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PublicReleaseFeedPageOutput"];
-                };
-            };
-            400: components["responses"]["InvalidRequest"];
-            429: components["responses"]["RateLimited"];
-            500: components["responses"]["InternalError"];
-            503: components["responses"]["ServiceUnavailable"];
-            default: components["responses"]["Error"];
-        };
-    };
-    "releases.getSpaceRelease": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                space: string;
-                slug: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PublicReleaseOutput"];
                 };
             };
             400: components["responses"]["InvalidRequest"];
