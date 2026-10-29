@@ -81,7 +81,7 @@ export interface paths {
          * Get a post
          * @description Fetch a post by ID. Returns a union on `state`: `eligible` with the post, or `gated` with a space CTA when the caller cannot read it.
          *
-         *     A missing post, a private space, and a post reached through the wrong space are the same 404.
+         *     A post shared to everyone, or to signed-in users, is served even when its space has no public profile; the space block then names the space with its doors closed. On such a space every other post, a missing post, and a post reached through the wrong space are the same 404 as a space that does not exist.
          */
         get: operations["posts.getPost"];
         put?: never;
