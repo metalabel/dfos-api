@@ -19,8 +19,8 @@ importers:
         specifier: ^4.7.1
         version: 4.7.1(prettier@3.9.10)
       '@metalabel/dfos-client':
-        specifier: 0.54.0
-        version: 0.54.0(@metalabel/dfos-protocol@0.54.0(zod@4.5.4))(@metalabel/dfos-web-relay@0.54.0(@metalabel/dfos-protocol@0.54.0(zod@4.5.4))(hono@4.13.4))
+        specifier: 0.55.0
+        version: 0.55.0(@metalabel/dfos-protocol@0.54.0(zod@4.5.4))(@metalabel/dfos-web-relay@0.54.0(@metalabel/dfos-protocol@0.54.0(zod@4.5.4))(hono@4.13.4))
       '@metalabel/dfos-protocol':
         specifier: 0.54.0
         version: 0.54.0(zod@4.5.4)
@@ -284,11 +284,11 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
-  '@metalabel/dfos-client@0.54.0':
-    resolution: {integrity: sha512-sizZZpNLx6scuHBIdOybpIkWnEePsQBm3nX0j87/V5ZTsZ9dyOPSxFViIX3thUY+dF2vDrnLhuAnNBOUoScMRw==}
+  '@metalabel/dfos-client@0.55.0':
+    resolution: {integrity: sha512-KvTd0iGfabOFyo2tz4M1kwol/LedpzKXEK6udBlxD/xlcjnjNizdXzLRyygbyyUXyLHBkX/nAfSidvojZrDThw==}
     peerDependencies:
-      '@metalabel/dfos-protocol': ^0.54.0
-      '@metalabel/dfos-web-relay': ^0.54.0
+      '@metalabel/dfos-protocol': ^0.55.0
+      '@metalabel/dfos-web-relay': ^0.55.0
 
   '@metalabel/dfos-protocol@0.54.0':
     resolution: {integrity: sha512-MCKxYWzkr/c59K5l8n+vjpJxtnuyQU7wGNKNShdwoNe2ajYOPaoZse74bJfeVdkX6zRuEFfzSqCNRjkuh7yC6w==}
@@ -1423,7 +1423,7 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
-  '@metalabel/dfos-client@0.54.0(@metalabel/dfos-protocol@0.54.0(zod@4.5.4))(@metalabel/dfos-web-relay@0.54.0(@metalabel/dfos-protocol@0.54.0(zod@4.5.4))(hono@4.13.4))':
+  '@metalabel/dfos-client@0.55.0(@metalabel/dfos-protocol@0.54.0(zod@4.5.4))(@metalabel/dfos-web-relay@0.54.0(@metalabel/dfos-protocol@0.54.0(zod@4.5.4))(hono@4.13.4))':
     dependencies:
       '@metalabel/dfos-protocol': 0.54.0(zod@4.5.4)
       '@metalabel/dfos-web-relay': 0.54.0(@metalabel/dfos-protocol@0.54.0(zod@4.5.4))(hono@4.13.4)
